@@ -34,26 +34,53 @@
   </form>
 </div>
 <script>
-  function normalizeCurrencyDigits(value) {
-    return value.replace(/\D/g, "");
+  function parseBrazilianCurrencyInput(value) {
+    const raw = (value || "").trim();
+    if (!raw) return null;
+
+    const sanitized = raw.replace(/[^\d,.-]/g, "");
+    if (!sanitized) return null;
+
+    if (sanitized.includes(",")) {
+      return Number(sanitized.replace(/\./g, "").replace(",", "."));
+    }
+
+    const dotCount = (sanitized.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      return Number(sanitized.replace(/\./g, ""));
+    }
+
+    if (dotCount === 1) {
+      const [integerPart, decimalPart = ""] = sanitized.split(".");
+      if (integerPart.length <= 3 && decimalPart.length <= 2) {
+        return Number(`${integerPart}.${decimalPart}`);
+      }
+      return Number(sanitized.replace(/\./g, ""));
+    }
+
+    return Number(sanitized);
   }
 
-  function formatCurrencyDigits(value) {
-    const digits = normalizeCurrencyDigits(value);
-    if (!digits) return "";
-    const padded = digits.padStart(3, "0");
-    const cents = padded.slice(-2);
-    const integer = padded.slice(0, -2).replace(/^0+/, "") || "0";
-    const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-    return `${grouped},${cents}`;
+  function formatBrazilianCurrency(value) {
+    if (value === null || Number.isNaN(value)) return "";
+    return new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
   }
 
   document.querySelectorAll(".currency-field").forEach((input) => {
-    input.addEventListener("input", () => {
-      input.value = formatCurrencyDigits(input.value);
+    input.addEventListener("blur", () => {
+      const parsed = parseBrazilianCurrencyInput(input.value);
+      if (parsed !== null && !Number.isNaN(parsed)) {
+        input.value = formatBrazilianCurrency(parsed);
+      }
     });
     if (input.value) {
-      input.value = formatCurrencyDigits(input.value);
+      const parsed = parseBrazilianCurrencyInput(input.value);
+      if (parsed !== null && !Number.isNaN(parsed)) {
+        input.value = formatBrazilianCurrency(parsed);
+      }
     }
   });
 </script>
