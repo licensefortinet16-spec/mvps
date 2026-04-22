@@ -1,0 +1,40 @@
+{% extends "auth_base.html" %}
+{% block content %}
+<section class="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+  <article class="rounded-[2rem] bg-slate-900 p-8 text-white shadow-xl lg:p-10">
+    <p class="text-sm font-semibold uppercase tracking-[0.32em] text-teal-300">Backend First</p>
+    <h1 class="mt-4 max-w-2xl text-4xl font-black leading-tight lg:text-5xl">Controle financeiro com processamento somente no backend.</h1>
+    <p class="mt-5 max-w-2xl text-base text-slate-300 lg:text-lg">
+      Holerites, faturas e comprovantes sobem para o servidor, sao extraidos no backend e voltam consolidados em receitas,
+      despesas, descontos e previsoes. O frontend so exibe e envia dados.
+    </p>
+    <div class="mt-8 grid gap-4 sm:grid-cols-2">
+      <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+        <p class="text-sm font-semibold text-white">Isolamento por tenant</p>
+        <p class="mt-2 text-sm text-slate-300">Cada cliente enxerga apenas os proprios dados e o admin nao acessa dados financeiros do tenant.</p>
+      </div>
+      <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+        <p class="text-sm font-semibold text-white">Pronto para app</p>
+        <p class="mt-2 text-sm text-slate-300">Interface responsiva e regras centrais no backend, facilitando a conexao futura com Android.</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="rounded-[2rem] bg-white p-8 shadow-xl lg:p-10">
+    <p class="text-sm font-semibold uppercase tracking-[0.24em] text-teal-700">Acesso Publico</p>
+    <h2 class="mt-3 text-3xl font-black text-slate-900">Entrar ou criar conta</h2>
+    <p class="mt-3 text-sm text-slate-500">As paginas publicas ficam separadas da area do cliente e da area administrativa.</p>
+    <div class="mt-8 grid gap-3">
+      <a href="/login" class="rounded-2xl bg-teal-600 px-5 py-4 text-center font-bold text-white">Entrar com e-mail</a>
+      <a href="/register" class="rounded-2xl border border-slate-200 px-5 py-4 text-center font-semibold text-slate-700">Criar conta manualmente</a>
+      {% if google_enabled %}
+      <a href="/login/google" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center font-semibold text-slate-700">Entrar ou criar conta com Google</a>
+      {% else %}
+      <div class="rounded-2xl bg-amber-50 px-5 py-4 text-sm text-amber-800">
+        Google fica disponivel quando `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` estiverem configurados.
+      </div>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="mb-4 flex flex-col gap-3 rounded-3xl bg-slate-900 p-5 text-white shadow-lg lg:flex-row lg:items-center lg:justify-between">
+  <div>
+    <p class="text-xs font-semibold uppercase tracking-[0.28em] text-teal-300">Resumo Financeiro</p>
+    <h1 class="mt-2 text-2xl font-black">Visao consolidada do mes e projeção curta.</h1>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <a href="/entries/new" class="rounded-full bg-teal-500 px-4 py-2 text-sm font-bold text-white">Novo lancamento</a>
+    <a href="/uploads" class="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white">Enviar arquivo</a>
+    <a href="/entries/plans/new" class="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900">Novo parcelamento</a>
+  </div>
+</section>
+
+<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <p class="text-sm text-slate-500">Receitas</p>
+    <p class="mt-2 text-3xl font-black text-emerald-600">R$ {{ "%.2f"|format(snapshot.total_income) }}</p>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <p class="text-sm text-slate-500">Despesas</p>
+    <p class="mt-2 text-3xl font-black text-rose-600">R$ {{ "%.2f"|format(snapshot.total_expense) }}</p>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <p class="text-sm text-slate-500">Saldo</p>
+    <p class="mt-2 text-3xl font-black text-slate-900">R$ {{ "%.2f"|format(snapshot.net) }}</p>
+  </article>
+  <article class="rounded-3xl bg-slate-900 p-6 shadow-lg">
+    <p class="text-sm text-slate-300">Parcelas futuras</p>
+    <p class="mt-2 text-3xl font-black text-white">{{ snapshot.upcoming_installments|length }}</p>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <p class="text-sm text-slate-500">Descontos</p>
+    <p class="mt-2 text-3xl font-black text-amber-600">R$ {{ "%.2f"|format(snapshot.deduction_total) }}</p>
+  </article>
+</section>
+
+{% if latest_payslip %}
+<section class="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-teal-700">Holerite Atual</p>
+        <h2 class="mt-2 text-2xl font-black text-slate-900">{{ latest_payslip_summary.competence or latest_payslip.filename }}</h2>
+        <p class="mt-1 text-sm text-slate-500">{{ latest_payslip_summary.employee_name or 'Colaborador nao identificado' }} • {{ latest_payslip_summary.company_name or 'Empresa nao identificada' }}</p>
+      </div>
+      <a href="/uploads/{{ latest_payslip.id }}/review" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Revisar holerite</a>
+    </div>
+    <div class="mt-6 grid gap-4 md:grid-cols-3">
+      <div class="rounded-3xl bg-emerald-50 p-5">
+        <p class="text-sm text-emerald-700">Bruto</p>
+        <p class="mt-2 text-3xl font-black text-emerald-700">R$ {{ "%.2f"|format(latest_payslip_summary.gross_income or 0) }}</p>
+      </div>
+      <div class="rounded-3xl bg-amber-50 p-5">
+        <p class="text-sm text-amber-700">Descontos</p>
+        <p class="mt-2 text-3xl font-black text-amber-700">R$ {{ "%.2f"|format(latest_payslip_summary.discounts or 0) }}</p>
+      </div>
+      <div class="rounded-3xl bg-slate-900 p-5">
+        <p class="text-sm text-slate-300">Liquido</p>
+        <p class="mt-2 text-3xl font-black text-white">R$ {{ "%.2f"|format(latest_payslip_summary.net_income or 0) }}</p>
+      </div>
+    </div>
+    <div class="mt-4 grid gap-4 md:grid-cols-4">
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <p class="text-sm text-slate-500">INSS</p>
+        <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(latest_payslip_summary.inss or 0) }}</p>
+      </div>
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <p class="text-sm text-slate-500">IRRF</p>
+        <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(latest_payslip_summary.irrf or 0) }}</p>
+      </div>
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <p class="text-sm text-slate-500">VT</p>
+        <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(latest_payslip_summary.vt or 0) }}</p>
+      </div>
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <p class="text-sm text-slate-500">VR/VA</p>
+        <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(latest_payslip_summary.vr or 0) }}</p>
+      </div>
+    </div>
+  </article>
+
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <h2 class="text-xl font-black text-slate-900">Rubricas do holerite</h2>
+    <p class="text-sm text-slate-500">Itens identificados no ultimo processamento.</p>
+    <div class="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
+      {% for item in latest_payslip_items %}
+      <div class="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
+        <p class="font-semibold text-slate-900">{{ item.label }}</p>
+        <p class="font-black text-amber-600">R$ {{ "%.2f"|format(item.amount) }}</p>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">Nenhuma rubrica detalhada encontrada no ultimo holerite.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endif %}
+
+<section class="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-black text-slate-900">Fluxo mensal</h2>
+        <p class="text-sm text-slate-500">Receitas e despesas consolidadas por mes</p>
+      </div>
+    </div>
+    <div class="mt-4 h-72">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </article>
+  <article class="grid gap-6">
+    <div class="rounded-3xl bg-white p-6 shadow-lg">
+      <h2 class="text-xl font-black text-slate-900">Despesas por categoria</h2>
+      <p class="text-sm text-slate-500">Distribuicao consolidada</p>
+      <div class="mt-4 h-72">
+        <canvas id="categoryChart"></canvas>
+      </div>
+    </div>
+    <div class="rounded-3xl bg-white p-6 shadow-lg">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-slate-900">Descontos do holerite</h2>
+          <p class="text-sm text-slate-500">Separados por tipo</p>
+        </div>
+        <a href="/entries/deductions/new" class="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900">Novo desconto</a>
+      </div>
+      <div class="mt-4 h-72">
+        <canvas id="deductionChart"></canvas>
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.85fr_0.95fr]">
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-black text-slate-900">Previsao dos proximos meses</h2>
+        <p class="text-sm text-slate-500">Baseada no historico recente e parcelas futuras</p>
+      </div>
+    </div>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="text-left text-slate-500">
+          <tr>
+            <th class="pb-3">Mes</th>
+            <th class="pb-3">Receita</th>
+            <th class="pb-3">Despesa</th>
+            <th class="pb-3">Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in snapshot.forecast %}
+          <tr class="border-t border-slate-100">
+            <td class="py-3 font-semibold">{{ item.month }}</td>
+            <td class="py-3 text-emerald-600">R$ {{ "%.2f"|format(item.income) }}</td>
+            <td class="py-3 text-rose-600">R$ {{ "%.2f"|format(item.expense) }}</td>
+            <td class="py-3 font-bold text-slate-900">R$ {{ "%.2f"|format(item.net) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="py-4 text-slate-500">Ainda nao ha historico suficiente para previsao.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <h2 class="text-xl font-black text-slate-900">Parcelas futuras</h2>
+    <div class="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+      {% for item in snapshot.upcoming_installments[:6] %}
+      <div class="rounded-2xl bg-slate-50 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="font-semibold text-slate-900">{{ item.title }}</p>
+              <p class="text-sm text-slate-500">{{ item.sequence }}a parcela • {{ item.due_date }}</p>
+            </div>
+            <p class="text-sm font-black text-slate-900">R$ {{ "%.2f"|format(item.amount) }}</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">Nenhuma parcela cadastrada.</p>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <h2 class="text-xl font-black text-slate-900">Ultimos lancamentos</h2>
+    <div class="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+      {% for entry in recent_entries[:5] %}
+      <div class="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
+        <div>
+          <p class="font-semibold text-slate-900">{{ entry.title }}</p>
+          <p class="text-sm text-slate-500">{{ entry.category }} • {{ entry.occurred_on }}</p>
+        </div>
+        <p class="font-black {% if entry.entry_type.value == 'income' %}text-emerald-600{% else %}text-rose-600{% endif %}">
+          {% if entry.entry_type.value == 'income' %}+{% else %}-{% endif %}R$ {{ "%.2f"|format(entry.amount) }}
+        </p>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">Nenhum lancamento registrado.</p>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <h2 class="text-xl font-black text-slate-900">Ultimos descontos</h2>
+    <div class="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+      {% for deduction in snapshot.recent_deductions %}
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-slate-900">{{ deduction.label }}</p>
+            <p class="text-sm text-slate-500">{{ deduction.competence or 'manual' }} • {{ deduction.source }}</p>
+          </div>
+          <p class="font-black text-amber-600">R$ {{ "%.2f"|format(deduction.amount) }}</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">Nenhum desconto registrado.</p>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <h2 class="text-xl font-black text-slate-900">Ultimos uploads</h2>
+    <div class="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+      {% for doc in recent_documents[:5] %}
+      <div class="rounded-2xl border border-slate-100 p-4">
+        <p class="font-semibold text-slate-900">{{ doc.filename }}</p>
+        <p class="text-sm text-slate-500">{{ doc.document_type.value }} • {{ doc.status.value }}</p>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">Nenhum documento enviado.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<script>
+  const monthly = {{ snapshot.monthly_chart|tojson }};
+  const categories = {{ snapshot.category_chart|tojson }};
+  const deductions = {{ snapshot.deduction_chart|tojson }};
+  new Chart(document.getElementById("monthlyChart"), {
+    type: "bar",
+    data: {
+      labels: monthly.map(item => item.month),
+      datasets: [
+        { label: "Receitas", data: monthly.map(item => item.income), backgroundColor: "#0f766e", borderRadius: 12 },
+        { label: "Despesas", data: monthly.map(item => item.expense), backgroundColor: "#e11d48", borderRadius: 12 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+  new Chart(document.getElementById("categoryChart"), {
+    type: "doughnut",
+    data: {
+      labels: categories.map(item => item.category),
+      datasets: [{ data: categories.map(item => item.amount), backgroundColor: ["#0f766e", "#f59e0b", "#1d4ed8", "#be123c", "#7c3aed", "#0891b2", "#16a34a", "#f97316"] }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+  new Chart(document.getElementById("deductionChart"), {
+    type: "bar",
+    data: {
+      labels: deductions.map(item => item.label),
+      datasets: [{ label: "Descontos", data: deductions.map(item => item.amount), backgroundColor: "#f59e0b", borderRadius: 12 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: "y"
+    }
+  });
+</script>
+{% endblock %}

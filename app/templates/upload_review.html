@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+  <article class="rounded-3xl bg-white p-8 shadow-xl">
+    <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-teal-700">Revisao</p>
+        <h1 class="mt-2 text-3xl font-black text-slate-900">Conferir extracao do holerite</h1>
+        <p class="mt-2 text-sm text-slate-500">{{ document.filename }} • confianca {{ "%.0f"|format(document.confidence * 100) }}%</p>
+      </div>
+      <a href="/uploads" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Voltar</a>
+    </div>
+    <form method="post" action="/uploads/{{ document.id }}/review" class="mt-8 space-y-6">
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Nome do colaborador</span>
+          <input name="employee_name" value="{{ summary.employee_name or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Empresa</span>
+          <input name="company_name" value="{{ summary.company_name or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Competencia</span>
+          <input name="competence" value="{{ summary.competence or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-3">
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Bruto</span>
+          <input name="gross_income" type="number" step="0.01" value="{{ summary.gross_income or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Descontos</span>
+          <input name="discounts" type="number" step="0.01" value="{{ summary.discounts or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">Liquido</span>
+          <input name="net_income" type="number" step="0.01" value="{{ summary.net_income or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">INSS</span>
+          <input name="inss" type="number" step="0.01" value="{{ summary.inss or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">IRRF</span>
+          <input name="irrf" type="number" step="0.01" value="{{ summary.irrf or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">VT</span>
+          <input name="vt" type="number" step="0.01" value="{{ summary.vt or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-slate-700">VR/VA</span>
+          <input name="vr" type="number" step="0.01" value="{{ summary.vr or '' }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+        </label>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900">Rubricas de desconto</h2>
+            <p class="text-sm text-slate-500">Edite os nomes e valores antes de consolidar no sistema.</p>
+          </div>
+        </div>
+        <div class="mt-4 space-y-3">
+          {% for item in items %}
+          <div class="grid gap-3 md:grid-cols-[1fr_180px]">
+            <input name="item_label" value="{{ item.label }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+            <input name="item_amount" type="number" step="0.01" value="{{ item.amount }}" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+          </div>
+          {% endfor %}
+          {% if not items %}
+          <div class="grid gap-3 md:grid-cols-[1fr_180px]">
+            <input name="item_label" placeholder="Nome do desconto" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+            <input name="item_amount" type="number" step="0.01" placeholder="0.00" class="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <button class="rounded-2xl bg-teal-600 px-5 py-3 font-bold text-white">Salvar revisao e consolidar</button>
+    </form>
+  </article>
+
+  <article class="rounded-3xl bg-white p-8 shadow-xl">
+    <h2 class="text-2xl font-black text-slate-900">Texto extraido</h2>
+    <p class="mt-2 text-sm text-slate-500">A revisao continua backend first: o arquivo original e o texto ficam no servidor.</p>
+    <pre class="mt-6 max-h-[70vh] overflow-auto rounded-3xl bg-slate-950 p-5 text-xs text-slate-100">{{ document.extracted_text or 'Nenhum texto extraido.' }}</pre>
+  </article>
+</section>
+{% endblock %}

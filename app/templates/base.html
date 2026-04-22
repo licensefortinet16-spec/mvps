@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ request.app.title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(251, 191, 36, 0.18), transparent 22%),
+        #f8fafc;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-900">
+  {% set current_path = request.url.path %}
+  {% set user_role = request.session.get("user_role") %}
+  <div class="min-h-screen">
+    {% if request.session.get("user_id") %}
+    <header class="border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          {% if user_role == "admin" %}
+          <a href="/admin" class="text-2xl font-black tracking-tight text-teal-700">Financa Admin</a>
+          <p class="text-sm text-slate-500">Metricas agregadas e operacao da plataforma</p>
+          {% else %}
+          <a href="/" class="text-2xl font-black tracking-tight text-teal-700">Financa</a>
+          <p class="text-sm text-slate-500">Controle financeiro com processamento no backend</p>
+          {% endif %}
+        </div>
+        <nav class="flex flex-wrap gap-2 text-sm font-semibold">
+          {% if user_role == "admin" %}
+          <a href="/admin" class="rounded-full px-4 py-2 {% if current_path.startswith('/admin') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard Admin</a>
+          {% else %}
+          <a href="/" class="rounded-full px-4 py-2 {% if current_path == '/' %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard</a>
+          <a href="/entries" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Lancamentos</a>
+          <a href="/uploads" class="rounded-full px-4 py-2 {% if current_path.startswith('/uploads') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Uploads</a>
+          <a href="/entries/plans/new" class="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Parcelas</a>
+          <a href="/entries/deductions/new" class="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Descontos</a>
+          <a href="/entries/new" class="rounded-full bg-amber-400 px-4 py-2 text-slate-900">Novo lancamento</a>
+          {% endif %}
+          <a href="/logout" class="rounded-full bg-slate-900 px-4 py-2 text-white">Sair</a>
+        </nav>
+      </div>
+    </header>
+    {% endif %}
+
+    <main class="mx-auto max-w-7xl px-4 py-6">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

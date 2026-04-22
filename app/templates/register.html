@@ -1,0 +1,21 @@
+{% extends "auth_base.html" %}
+{% block content %}
+<div class="mx-auto max-w-xl rounded-3xl bg-white p-8 shadow-xl">
+  <a href="/login" class="text-sm font-semibold text-teal-700">Financa</a>
+  <h1 class="text-3xl font-black text-slate-900">Criar conta</h1>
+  <p class="mt-2 text-sm text-slate-500">Esta pagina e publica e separada da area do cliente e da area administrativa.</p>
+  {% if error %}
+  <p class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="/register" class="mt-6 space-y-4">
+    <input name="full_name" placeholder="Nome completo" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="email" type="email" placeholder="E-mail" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="password" type="password" placeholder="Senha" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+    <button class="w-full rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white">Cadastrar</button>
+  </form>
+  {% if google_enabled %}
+  <a href="/login/google" class="mt-4 block rounded-2xl border border-slate-200 px-4 py-3 text-center font-semibold text-slate-700">Criar conta com Google</a>
+  {% endif %}
+  <p class="mt-6 text-sm text-slate-500"><a href="/login" class="font-semibold text-teal-700">Voltar para login</a></p>
+</div>
+{% endblock %}

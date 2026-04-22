@@ -1,0 +1,33 @@
+{% extends "auth_base.html" %}
+{% block content %}
+<div class="mx-auto grid max-w-5xl gap-6 lg:grid-cols-2">
+  <section class="rounded-3xl bg-slate-900 p-8 text-white shadow-xl">
+    <p class="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-teal-300">Backend First</p>
+    <h1 class="text-4xl font-black leading-tight">Seus dados financeiros ficam isolados por tenant.</h1>
+    <p class="mt-4 text-slate-300">Toda extracao, classificacao, previsao e consolidacao acontece no backend. O frontend so exibe e envia dados.</p>
+    <div class="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
+      <p class="text-sm text-slate-300">Acesso publico</p>
+      <p class="mt-2 text-lg font-black">Login e cadastro ficam fora da area do cliente e fora da area administrativa.</p>
+    </div>
+  </section>
+
+  <section class="rounded-3xl bg-white p-8 shadow-xl">
+    <a href="/" class="text-sm font-semibold text-teal-700">Financa</a>
+    <h2 class="text-2xl font-black text-slate-900">Entrar</h2>
+    {% if error %}
+    <p class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/login" class="mt-6 space-y-4">
+      <input name="email" type="email" placeholder="E-mail" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <input name="password" type="password" placeholder="Senha" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <button class="w-full rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white">Entrar</button>
+    </form>
+    {% if google_enabled %}
+    <a href="/login/google" class="mt-4 block rounded-2xl border border-slate-200 px-4 py-3 text-center font-semibold text-slate-700">Entrar com Google</a>
+    {% else %}
+    <p class="mt-4 text-sm text-slate-500">Login com Google depende de `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`.</p>
+    {% endif %}
+    <p class="mt-6 text-sm text-slate-500">Ainda sem conta? <a href="/register" class="font-semibold text-teal-700">Criar cadastro</a></p>
+  </section>
+</div>
+{% endblock %}

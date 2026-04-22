@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Tenants</p><p class="mt-3 text-3xl font-black">{{ stats.tenants }}</p></article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Usuarios</p><p class="mt-3 text-3xl font-black">{{ stats.users }}</p></article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Documentos</p><p class="mt-3 text-3xl font-black">{{ stats.documents }}</p></article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Lancamentos</p><p class="mt-3 text-3xl font-black">{{ stats.entries }}</p></article>
+  <article class="rounded-3xl bg-slate-900 p-6 shadow-lg"><p class="text-sm text-slate-300">Eventos de auditoria</p><p class="mt-3 text-3xl font-black text-white">{{ stats.events }}</p></article>
+</section>
+
+<section class="mt-6 rounded-3xl bg-white p-8 shadow-xl">
+  <h1 class="text-3xl font-black text-slate-900">Uso da plataforma</h1>
+  <p class="mt-2 text-sm text-slate-500">Esta area nao exibe dados de clientes nem detalhes por tenant.</p>
+  <div class="mt-6 overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="text-left text-slate-500">
+        <tr>
+          <th class="pb-3">Status do documento</th>
+          <th class="pb-3">Quantidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status, count in document_status %}
+        <tr class="border-t border-slate-100">
+          <td class="py-3">{{ status.value }}</td>
+          <td class="py-3 font-bold">{{ count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="py-4 text-slate-500">Sem dados agregados ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+

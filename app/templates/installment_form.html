@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
+  <h1 class="text-3xl font-black text-slate-900">Novo parcelamento ou financiamento</h1>
+  <form method="post" action="/entries/plans/new" class="mt-6 grid gap-4 md:grid-cols-2">
+    <input name="title" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
+    <input name="merchant" placeholder="Loja ou credor" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="category" placeholder="Categoria" value="Parcelamentos" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="total_amount" type="number" step="0.01" min="0" placeholder="Valor total" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="installment_count" type="number" min="2" placeholder="Quantidade de parcelas" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="start_date" type="date" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
+    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">Salvar parcelamento</button>
+  </form>
+</div>
+{% endblock %}
+

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
+  <h1 class="text-3xl font-black text-slate-900">Novo desconto manual</h1>
+  <p class="mt-2 text-sm text-slate-500">Use esta tela para complementar ou corrigir descontos do holerite.</p>
+  <form method="post" action="/entries/deductions/new" class="mt-6 grid gap-4 md:grid-cols-2">
+    <input name="label" placeholder="Tipo de desconto" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="amount" type="number" step="0.01" min="0" placeholder="Valor" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="competence" placeholder="Competencia ex: 03/2026" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="occurred_on" type="date" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <button class="rounded-2xl bg-amber-400 px-4 py-3 font-bold text-slate-900 md:col-span-2">Salvar desconto</button>
+  </form>
+</div>
+{% endblock %}
