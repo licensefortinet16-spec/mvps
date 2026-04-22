@@ -26,8 +26,8 @@
     <p class="mt-2 text-3xl font-black text-slate-900">R$ {{ "%.2f"|format(snapshot.net) }}</p>
   </article>
   <article class="rounded-3xl bg-slate-900 p-6 shadow-lg">
-    <p class="text-sm text-slate-300">Parcelas futuras</p>
-    <p class="mt-2 text-3xl font-black text-white">{{ snapshot.upcoming_installments|length }}</p>
+    <p class="text-sm text-slate-300">Parcelas de financiamentos</p>
+    <p class="mt-2 text-3xl font-black text-white">{{ snapshot.upcoming_installment_count }}</p>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
     <p class="text-sm text-slate-500">Descontos</p>
@@ -137,7 +137,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h2 class="text-xl font-black text-slate-900">Previsao dos proximos meses</h2>
-        <p class="text-sm text-slate-500">Baseada no historico recente e parcelas futuras</p>
+        <p class="text-sm text-slate-500">Baseada no historico recente e parcelas futuras dos financiamentos</p>
       </div>
     </div>
     <div class="mt-4 overflow-x-auto">
@@ -166,7 +166,7 @@
     </div>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
-    <h2 class="text-xl font-black text-slate-900">Parcelas futuras</h2>
+    <h2 class="text-xl font-black text-slate-900">Parcelas dos financiamentos</h2>
     <div class="mt-2 flex justify-end">
       <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Gerenciar financiamentos</a>
     </div>

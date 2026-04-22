@@ -58,8 +58,11 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
         deduction_totals[deduction.label] += amount
         monthly_deductions[_month_key(deduction.occurred_on)] += amount
 
+    today = date.today()
     upcoming_installments = []
-    for installment, plan in installments[:12]:
+    for installment, plan in installments:
+        if installment.due_date < today or installment.status.value == "paid":
+            continue
         upcoming_installments.append(
             {
                 "title": plan.title,
@@ -100,6 +103,7 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
         "total_expense": float(totals["expense"]),
         "net": float(totals["income"] - totals["expense"]),
         "deduction_total": deduction_total,
+        "upcoming_installment_count": len(upcoming_installments),
         "monthly_chart": monthly_chart,
         "category_chart": category_chart,
         "deduction_chart": deduction_chart,
