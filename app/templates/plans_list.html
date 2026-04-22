@@ -22,11 +22,11 @@
       <div class="mt-4 grid gap-4 md:grid-cols-4">
         <div class="rounded-2xl bg-slate-50 p-4">
           <p class="text-sm text-slate-500">Valor total</p>
-          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(plan.total_amount) }}</p>
+          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ plan.total_amount|brl }}</p>
         </div>
         <div class="rounded-2xl bg-slate-50 p-4">
           <p class="text-sm text-slate-500">Valor da parcela</p>
-          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(item.installment_amount) }}</p>
+          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ item.installment_amount|brl }}</p>
         </div>
         <div class="rounded-2xl bg-slate-50 p-4">
           <p class="text-sm text-slate-500">Andamento</p>

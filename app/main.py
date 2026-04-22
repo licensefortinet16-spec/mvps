@@ -27,6 +27,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.state.templates = Jinja2Templates(directory=str(templates_dir))
 app.state.settings = settings
+app.state.templates.env.filters["brl"] = lambda value: f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 @app.middleware("http")
