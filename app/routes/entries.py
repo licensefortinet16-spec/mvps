@@ -52,6 +52,17 @@ def create_entry(
     return RedirectResponse("/", status_code=303)
 
 
+@router.post("/{entry_id}/delete")
+def delete_entry(entry_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    entry = db.get(FinancialEntry, entry_id)
+    if not entry or entry.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries", status_code=303)
+    db.delete(entry)
+    db.commit()
+    log_event(db, "entries.delete", user=user, metadata={"entry_id": entry_id})
+    return RedirectResponse("/entries", status_code=303)
+
+
 @router.get("/plans/new")
 def new_plan(request: Request, user: User = Depends(get_current_client)):
     return request.app.state.templates.TemplateResponse(

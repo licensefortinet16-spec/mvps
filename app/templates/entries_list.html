@@ -18,6 +18,7 @@
           <th class="pb-3">Data</th>
           <th class="pb-3">Valor</th>
           <th class="pb-3">Origem</th>
+          <th class="pb-3 text-right">Acoes</th>
         </tr>
       </thead>
       <tbody>
@@ -29,13 +30,17 @@
           <td class="py-3">{{ entry.occurred_on }}</td>
           <td class="py-3 font-bold">R$ {{ "%.2f"|format(entry.amount) }}</td>
           <td class="py-3">{{ entry.source }}</td>
+          <td class="py-3 text-right">
+            <form method="post" action="/entries/{{ entry.id }}/delete" onsubmit="return confirm('Excluir este lancamento?');">
+              <button class="rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">Excluir</button>
+            </form>
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="py-4 text-slate-500">Nenhum lancamento cadastrado.</td></tr>
+        <tr><td colspan="7" class="py-4 text-slate-500">Nenhum lancamento cadastrado.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
 {% endblock %}
-
