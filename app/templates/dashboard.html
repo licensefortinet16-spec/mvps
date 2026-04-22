@@ -167,13 +167,16 @@
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
     <h2 class="text-xl font-black text-slate-900">Parcelas futuras</h2>
+    <div class="mt-2 flex justify-end">
+      <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Gerenciar financiamentos</a>
+    </div>
     <div class="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
       {% for item in snapshot.upcoming_installments[:6] %}
       <div class="rounded-2xl bg-slate-50 p-4">
         <div class="flex items-start justify-between gap-3">
           <div>
             <p class="font-semibold text-slate-900">{{ item.title }}</p>
-              <p class="text-sm text-slate-500">{{ item.sequence }}a parcela • {{ item.due_date }}</p>
+              <p class="text-sm text-slate-500">{{ item.sequence }}a parcela de {{ item.total_count }} • {{ item.due_date }}</p>
             </div>
             <p class="text-sm font-black text-slate-900">R$ {{ "%.2f"|format(item.amount) }}</p>
         </div>

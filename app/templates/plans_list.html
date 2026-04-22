@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="rounded-3xl bg-white p-6 shadow-xl">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 class="text-3xl font-black text-slate-900">Financiamentos e parcelamentos</h1>
+      <p class="text-sm text-slate-500">Edite contratos longos, revise a proxima parcela e acompanhe o saldo planejado.</p>
+    </div>
+    <a href="/entries/plans/new" class="rounded-2xl bg-teal-600 px-4 py-3 text-center font-bold text-white">Novo financiamento</a>
+  </div>
+  <div class="mt-6 grid gap-4">
+    {% for item in plans %}
+    {% set plan = item.plan %}
+    <article class="rounded-3xl border border-slate-100 p-5">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 class="text-xl font-black text-slate-900">{{ plan.title }}</h2>
+          <p class="mt-1 text-sm text-slate-500">{{ plan.merchant or 'Credor nao informado' }} • {{ plan.category }}</p>
+        </div>
+        <a href="/entries/plans/{{ plan.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+      </div>
+      <div class="mt-4 grid gap-4 md:grid-cols-4">
+        <div class="rounded-2xl bg-slate-50 p-4">
+          <p class="text-sm text-slate-500">Valor total</p>
+          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(plan.total_amount) }}</p>
+        </div>
+        <div class="rounded-2xl bg-slate-50 p-4">
+          <p class="text-sm text-slate-500">Valor da parcela</p>
+          <p class="mt-2 text-xl font-black text-slate-900">R$ {{ "%.2f"|format(item.installment_amount) }}</p>
+        </div>
+        <div class="rounded-2xl bg-slate-50 p-4">
+          <p class="text-sm text-slate-500">Andamento</p>
+          <p class="mt-2 text-xl font-black text-slate-900">{{ item.paid_count }}/{{ plan.installment_count }}</p>
+        </div>
+        <div class="rounded-2xl bg-slate-50 p-4">
+          <p class="text-sm text-slate-500">Proxima parcela</p>
+          <p class="mt-2 text-xl font-black text-slate-900">{% if item.next_installment %}{{ item.next_installment.sequence }}a{% else %}Finalizado{% endif %}</p>
+          {% if item.next_installment %}
+          <p class="text-sm text-slate-500">{{ item.next_installment.due_date }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <p class="text-sm text-slate-500">Nenhum financiamento ou parcelamento cadastrado.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

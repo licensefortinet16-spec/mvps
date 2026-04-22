@@ -1,16 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
-  <h1 class="text-3xl font-black text-slate-900">Novo parcelamento ou financiamento</h1>
-  <form method="post" action="/entries/plans/new" class="mt-6 grid gap-4 md:grid-cols-2">
-    <input name="title" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
-    <input name="merchant" placeholder="Loja ou credor" class="rounded-2xl border border-slate-200 px-4 py-3" />
-    <input name="category" placeholder="Categoria" value="Parcelamentos" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <input name="total_amount" type="number" step="0.01" min="0" placeholder="Valor total" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <input name="installment_count" type="number" min="2" placeholder="Quantidade de parcelas" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <input name="start_date" type="date" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
-    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">Salvar parcelamento</button>
+  {% set values = form_values or {} %}
+  {% set current_title = values.get('title') if values else (plan.title if plan else '') %}
+  {% set current_merchant = values.get('merchant') if values else (plan.merchant if plan else '') %}
+  {% set current_category = values.get('category') if values else (plan.category if plan else 'Financiamentos') %}
+  {% set current_total = values.get('total_amount') if values else (plan.total_amount if plan else '') %}
+  {% set current_per_installment = values.get('installment_amount') if values else ((plan.installments[0].amount if plan and plan.installments else '') ) %}
+  {% set current_count = values.get('installment_count') if values else (plan.installment_count if plan else '') %}
+  {% set current_start = values.get('start_date') if values else (plan.start_date.isoformat() if plan else '') %}
+  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div>
+      <h1 class="text-3xl font-black text-slate-900">{% if mode == 'edit' %}Editar financiamento ou parcelamento{% else %}Novo parcelamento ou financiamento{% endif %}</h1>
+      <p class="mt-2 text-sm text-slate-500">Voce pode informar o valor total do contrato ou o valor da parcela. Para financiamentos longos, use a tela de gestao para editar depois.</p>
+    </div>
+    <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Ver financiamentos</a>
+  </div>
+  {% if error %}
+  <p class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="{% if mode == 'edit' %}/entries/plans/{{ plan.id }}/edit{% else %}/entries/plans/new{% endif %}" class="mt-6 grid gap-4 md:grid-cols-2">
+    <input name="title" value="{{ current_title }}" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
+    <input name="merchant" value="{{ current_merchant }}" placeholder="Loja ou credor" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="category" value="{{ current_category }}" placeholder="Categoria" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="total_amount" value="{{ current_total }}" type="number" step="0.01" min="0" placeholder="Valor total do contrato" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="installment_amount" value="{{ current_per_installment }}" type="number" step="0.01" min="0" placeholder="Valor de cada parcela" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="installment_count" value="{{ current_count }}" type="number" min="2" placeholder="Quantidade de parcelas" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <input name="start_date" value="{{ current_start }}" type="date" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+    <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 md:col-span-2">
+      Exemplo: se sua moto e 48x de R$ 612,34, voce pode preencher `valor da parcela = 612,34` e `quantidade = 48`. O sistema calcula o total automaticamente.
+    </div>
+    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">{% if mode == 'edit' %}Salvar alteracoes{% else %}Salvar parcelamento{% endif %}</button>
   </form>
 </div>
 {% endblock %}
-

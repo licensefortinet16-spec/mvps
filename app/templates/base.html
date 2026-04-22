@@ -38,7 +38,7 @@
           <a href="/" class="rounded-full px-4 py-2 {% if current_path == '/' %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard</a>
           <a href="/entries" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Lancamentos</a>
           <a href="/uploads" class="rounded-full px-4 py-2 {% if current_path.startswith('/uploads') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Uploads</a>
-          <a href="/entries/plans/new" class="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Parcelas</a>
+          <a href="/entries/plans" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries/plans') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Financiamentos</a>
           <a href="/entries/deductions/new" class="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Descontos</a>
           <a href="/entries/new" class="rounded-full bg-amber-400 px-4 py-2 text-slate-900">Novo lancamento</a>
           {% endif %}

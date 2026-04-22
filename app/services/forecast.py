@@ -64,6 +64,7 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
             {
                 "title": plan.title,
                 "sequence": installment.sequence,
+                "total_count": plan.installment_count,
                 "amount": float(installment.amount),
                 "due_date": installment.due_date.isoformat(),
                 "status": installment.status.value,
