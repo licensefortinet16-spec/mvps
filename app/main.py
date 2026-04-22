@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,6 +14,9 @@ from app.routes import admin, auth, dashboard, entries, uploads
 
 
 settings = get_settings()
+base_dir = Path(__file__).resolve().parent
+static_dir = base_dir / "static"
+templates_dir = base_dir / "templates"
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
     SessionMiddleware,
@@ -19,8 +24,8 @@ app.add_middleware(
     same_site="lax",
     https_only=settings.is_production,
 )
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.state.templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+app.state.templates = Jinja2Templates(directory=str(templates_dir))
 app.state.settings = settings
 
 
