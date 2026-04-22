@@ -38,6 +38,13 @@ MONTH_YEAR_TEXT_PATTERN = re.compile(
     r"(janeiro|fevereiro|marco|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)[/\-\s]+(\d{4})",
     re.IGNORECASE,
 )
+DATE_PATTERN = re.compile(r"\b(\d{2}/\d{2}/\d{4})\b")
+RECEIPT_TOTAL_KEYWORDS = [
+    "valor total",
+    "total r$",
+    "total",
+    "vl total",
+]
 
 PAYSLIP_FIELD_KEYWORDS = {
     "gross_income": ["salario bruto", "bruto", "total vencimentos", "total proventos", "proventos", "vencimentos"],
@@ -189,6 +196,85 @@ def infer_company_name(lines: list[str]) -> str | None:
         if len(cleaned) >= 5 and any(char.isalpha() for char in cleaned):
             return cleaned[:160]
     return None
+
+
+def parse_date_br(value: str) -> date | None:
+    try:
+        return datetime.strptime(value, "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
+
+def infer_receipt_merchant(lines: list[str]) -> str | None:
+    for line in lines[:8]:
+        cleaned = normalize_spaces(line)
+        normalized = normalize_text(cleaned)
+        if not cleaned:
+            continue
+        if any(token in normalized for token in ["documento auxiliar", "consumidor eletronica", "consulte pela chave", "qtd.total"]):
+            continue
+        if re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", cleaned):
+            continue
+        if any(char.isalpha() for char in cleaned) and len(cleaned) >= 6:
+            return cleaned[:160]
+    return None
+
+
+def extract_receipt_total(lines: list[str]) -> float | None:
+    for line in lines:
+        normalized = normalize_text(line)
+        if any(keyword in normalized for keyword in RECEIPT_TOTAL_KEYWORDS):
+            amount = extract_amount_from_line(line)
+            if amount is not None:
+                return amount
+    return None
+
+
+def extract_receipt_date(lines: list[str]) -> date | None:
+    for line in lines:
+        match = DATE_PATTERN.search(line)
+        if match:
+            parsed = parse_date_br(match.group(1))
+            if parsed:
+                return parsed
+    return None
+
+
+def extract_receipt_items(lines: list[str]) -> list[dict]:
+    items: list[dict] = []
+    for line in lines:
+        normalized = normalize_text(line)
+        if "valor total" in normalized or "forma de pagamento" in normalized:
+            break
+        amount = extract_amount_from_line(line)
+        if amount is None:
+            continue
+        if not re.search(r"\b\d{3,}\b", line):
+            continue
+        label = normalize_spaces(AMOUNT_PATTERN.sub("", line))
+        if len(label) < 4:
+            continue
+        items.append({"label": label[:160], "amount": amount})
+    return items[:10]
+
+
+def extract_receipt_data(text: str, filename: str, document_type: DocumentType) -> tuple[dict, float]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    total = extract_receipt_total(lines)
+    items = extract_receipt_items(lines)
+    if total is None and items:
+        total = round(sum(item["amount"] for item in items), 2)
+
+    merchant = infer_receipt_merchant(lines) or filename
+    occurred_on = extract_receipt_date(lines)
+    summary = {
+        "merchant": merchant,
+        "detected_total": total,
+        "occurred_on": occurred_on.isoformat() if occurred_on else None,
+        "document_kind": "credit_card" if document_type == DocumentType.CREDIT_CARD else "receipt",
+    }
+    confidence = 0.78 if total is not None else 0.45
+    return {"summary": summary, "items": items}, confidence
 
 
 def infer_employee_name(lines: list[str]) -> str | None:
@@ -502,23 +588,24 @@ def process_document(db: Session, document_id: int) -> None:
                     extracted_data["items"].append({"title": title, "installment": f"{current}/{total}", "amount": amount})
 
             if not extracted_data["items"]:
-                amounts = [parse_brazilian_amount(item) for item in AMOUNT_PATTERN.findall(text)]
-                if amounts:
-                    total_amount = sum(amounts[:10])
+                extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
+                summary = extracted_data.get("summary") or {}
+                total_amount = summary.get("detected_total")
+                merchant = summary.get("merchant") or f"Importacao {document.filename}"
+                occurred_on = parse_date_br(summary.get("occurred_on")) if summary.get("occurred_on") else datetime.utcnow().date()
+                if total_amount:
                     entry = FinancialEntry(
                         tenant_id=document.tenant_id,
                         user_id=document.user_id,
-                        title=f"Importacao {document.filename}",
-                        category="Cartao" if document.document_type == DocumentType.CREDIT_CARD else "Despesas Gerais",
+                        title=merchant[:160],
+                        category="Cartao" if document.document_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
                         entry_type=EntryType.EXPENSE,
                         amount=round(total_amount, 2),
-                        occurred_on=datetime.utcnow().date(),
+                        occurred_on=occurred_on,
                         source="upload",
                         notes="Lancamento resumido gerado por extracao automatica",
                     )
                     db.add(entry)
-                    extracted_data["summary"] = {"detected_total": round(total_amount, 2)}
-                    confidence = 0.6
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]
