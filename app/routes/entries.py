@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+import re
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
@@ -65,8 +66,8 @@ def create_plan(
     title: str = Form(...),
     merchant: str = Form(""),
     category: str = Form(...),
-    total_amount: float = Form(0),
-    installment_amount: float = Form(0),
+    total_amount: str = Form(""),
+    installment_amount: str = Form(""),
     installment_count: int = Form(...),
     start_date: date = Form(...),
     db: Session = Depends(get_db),
@@ -89,8 +90,8 @@ def create_plan(
                     "title": title,
                     "merchant": merchant,
                     "category": category,
-                    "total_amount": total_amount or "",
-                    "installment_amount": installment_amount or "",
+                    "total_amount": total_amount,
+                    "installment_amount": installment_amount,
                     "installment_count": installment_count,
                     "start_date": start_date.isoformat(),
                 },
@@ -174,8 +175,8 @@ def update_plan(
     title: str = Form(...),
     merchant: str = Form(""),
     category: str = Form(...),
-    total_amount: float = Form(0),
-    installment_amount: float = Form(0),
+    total_amount: str = Form(""),
+    installment_amount: str = Form(""),
     installment_count: int = Form(...),
     start_date: date = Form(...),
     db: Session = Depends(get_db),
@@ -202,8 +203,8 @@ def update_plan(
                     "title": title,
                     "merchant": merchant,
                     "category": category,
-                    "total_amount": total_amount or "",
-                    "installment_amount": installment_amount or "",
+                    "total_amount": total_amount,
+                    "installment_amount": installment_amount,
                     "installment_count": installment_count,
                     "start_date": start_date.isoformat(),
                 },
@@ -275,12 +276,12 @@ def list_entries(request: Request, db: Session = Depends(get_db), user: User = D
     return request.app.state.templates.TemplateResponse("entries_list.html", {"request": request, "entries": entries})
 
 
-def resolve_plan_amounts(total_amount: float, installment_amount: float, installment_count: int) -> tuple[Decimal, Decimal, str | None]:
+def resolve_plan_amounts(total_amount: str, installment_amount: str, installment_count: int) -> tuple[Decimal, Decimal, str | None]:
     if installment_count < 2:
         return Decimal("0"), Decimal("0"), "A quantidade de parcelas precisa ser pelo menos 2."
 
-    total = Decimal(str(total_amount or 0)).quantize(Decimal("0.01"))
-    per_installment = Decimal(str(installment_amount or 0)).quantize(Decimal("0.01"))
+    total = parse_currency_input(total_amount)
+    per_installment = parse_currency_input(installment_amount)
 
     if total <= 0 and per_installment <= 0:
         return Decimal("0"), Decimal("0"), "Informe o valor total do contrato ou o valor da parcela."
@@ -297,6 +298,30 @@ def resolve_plan_amounts(total_amount: float, installment_amount: float, install
 
     per_installment = (total / Decimal(installment_count)).quantize(Decimal("0.01"))
     return total, per_installment, None
+
+
+def parse_currency_input(raw_value: str | float | int | None) -> Decimal:
+    if raw_value is None:
+        return Decimal("0.00")
+    if isinstance(raw_value, (int, float)):
+        return Decimal(str(raw_value)).quantize(Decimal("0.01"))
+
+    value = str(raw_value).strip()
+    if not value:
+        return Decimal("0.00")
+
+    sanitized = re.sub(r"[^\d,.-]", "", value)
+    if not sanitized:
+        return Decimal("0.00")
+
+    if "," in sanitized:
+        normalized = sanitized.replace(".", "").replace(",", ".")
+    elif sanitized.count(".") > 1:
+        normalized = sanitized.replace(".", "")
+    else:
+        normalized = sanitized
+
+    return Decimal(normalized).quantize(Decimal("0.01"))
 
 
 def replace_plan_installments(

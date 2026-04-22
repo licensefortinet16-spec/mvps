@@ -5,8 +5,8 @@
   {% set current_title = values.get('title') if values else (plan.title if plan else '') %}
   {% set current_merchant = values.get('merchant') if values else (plan.merchant if plan else '') %}
   {% set current_category = values.get('category') if values else (plan.category if plan else 'Financiamentos') %}
-  {% set current_total = values.get('total_amount') if values else (plan.total_amount if plan else '') %}
-  {% set current_per_installment = values.get('installment_amount') if values else ((plan.installments[0].amount if plan and plan.installments else '') ) %}
+  {% set current_total = values.get('total_amount') if values else ('{:,.2f}'.format(plan.total_amount).replace(',', 'X').replace('.', ',').replace('X', '.') if plan else '') %}
+  {% set current_per_installment = values.get('installment_amount') if values else (('{:,.2f}'.format(plan.installments[0].amount).replace(',', 'X').replace('.', ',').replace('X', '.')) if plan and plan.installments else '') %}
   {% set current_count = values.get('installment_count') if values else (plan.installment_count if plan else '') %}
   {% set current_start = values.get('start_date') if values else (plan.start_date.isoformat() if plan else '') %}
   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -23,8 +23,8 @@
     <input name="title" value="{{ current_title }}" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
     <input name="merchant" value="{{ current_merchant }}" placeholder="Loja ou credor" class="rounded-2xl border border-slate-200 px-4 py-3" />
     <input name="category" value="{{ current_category }}" placeholder="Categoria" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <input name="total_amount" value="{{ current_total }}" type="number" step="0.01" min="0" placeholder="Valor total do contrato" class="rounded-2xl border border-slate-200 px-4 py-3" />
-    <input name="installment_amount" value="{{ current_per_installment }}" type="number" step="0.01" min="0" placeholder="Valor de cada parcela" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="total_amount" value="{{ current_total }}" type="text" inputmode="decimal" placeholder="Valor total do contrato" class="currency-field rounded-2xl border border-slate-200 px-4 py-3" />
+    <input name="installment_amount" value="{{ current_per_installment }}" type="text" inputmode="decimal" placeholder="Valor de cada parcela" class="currency-field rounded-2xl border border-slate-200 px-4 py-3" />
     <input name="installment_count" value="{{ current_count }}" type="number" min="2" placeholder="Quantidade de parcelas" class="rounded-2xl border border-slate-200 px-4 py-3" required />
     <input name="start_date" value="{{ current_start }}" type="date" class="rounded-2xl border border-slate-200 px-4 py-3" required />
     <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 md:col-span-2">
@@ -33,4 +33,28 @@
     <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">{% if mode == 'edit' %}Salvar alteracoes{% else %}Salvar parcelamento{% endif %}</button>
   </form>
 </div>
+<script>
+  function normalizeCurrencyDigits(value) {
+    return value.replace(/\D/g, "");
+  }
+
+  function formatCurrencyDigits(value) {
+    const digits = normalizeCurrencyDigits(value);
+    if (!digits) return "";
+    const padded = digits.padStart(3, "0");
+    const cents = padded.slice(-2);
+    const integer = padded.slice(0, -2).replace(/^0+/, "") || "0";
+    const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return `${grouped},${cents}`;
+  }
+
+  document.querySelectorAll(".currency-field").forEach((input) => {
+    input.addEventListener("input", () => {
+      input.value = formatCurrencyDigits(input.value);
+    });
+    if (input.value) {
+      input.value = formatCurrencyDigits(input.value);
+    }
+  });
+</script>
 {% endblock %}
