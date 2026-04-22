@@ -23,6 +23,7 @@ from app.models import (
     Installment,
     InstallmentPlan,
     PayslipDeduction,
+    PlanType,
     User,
 )
 
@@ -479,6 +480,7 @@ def process_document(db: Session, document_id: int) -> None:
                             user_id=document.user_id,
                             title=title or "Compra parcelada",
                             merchant=title or "Compra parcelada",
+                            plan_type=PlanType.INSTALLMENT,
                             category=categorize_merchant(title),
                             total_amount=round(amount * total, 2),
                             installment_count=total,

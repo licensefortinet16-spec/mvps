@@ -8,8 +8,8 @@
   <div class="flex flex-wrap gap-2">
     <a href="/entries/new" class="rounded-full bg-teal-500 px-4 py-2 text-sm font-bold text-white">Novo lancamento</a>
     <a href="/uploads" class="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white">Enviar arquivo</a>
-    <a href="/entries/plans/new" class="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900">Novo parcelamento</a>
-    <a href="/entries/plans" class="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white">Editar parcelamentos</a>
+    <a href="/entries/plans/new" class="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900">Novo contrato</a>
+    <a href="/entries/plans" class="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white">Editar contratos</a>
   </div>
 </section>
 
@@ -33,6 +33,10 @@
   <article class="rounded-3xl bg-white p-6 shadow-lg">
     <p class="text-sm text-slate-500">Parcelamentos</p>
     <p class="mt-2 text-3xl font-black text-slate-900">{{ snapshot.active_installment_plan_count }}</p>
+  </article>
+  <article class="rounded-3xl bg-white p-6 shadow-lg">
+    <p class="text-sm text-slate-500">Financiamentos</p>
+    <p class="mt-2 text-3xl font-black text-slate-900">{{ snapshot.active_financing_count }}</p>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
     <p class="text-sm text-slate-500">Descontos</p>

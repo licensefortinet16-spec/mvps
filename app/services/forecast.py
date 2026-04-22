@@ -3,28 +3,15 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
-import unicodedata
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction
+from app.models import EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, PlanType
 
 
 def _month_key(value: date) -> str:
     return f"{value.year}-{value.month:02d}"
-
-
-def _normalize_label(value: str | None) -> str:
-    normalized = unicodedata.normalize("NFKD", value or "")
-    return "".join(char for char in normalized if not unicodedata.combining(char)).lower().strip()
-
-
-def _plan_kind(category: str | None) -> str:
-    normalized = _normalize_label(category)
-    if "financi" in normalized:
-        return "financing"
-    return "installment"
 
 
 def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
@@ -80,6 +67,7 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
             plan.id,
             {
                 "title": plan.title,
+                "plan_type": plan.plan_type.value,
                 "category": plan.category,
                 "total_amount": Decimal(plan.total_amount),
                 "installment_count": plan.installment_count,
@@ -130,8 +118,8 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
     ]
     deduction_total = float(sum(deduction_totals.values()))
     active_financings = [item for item in financing_contracts.values() if item["remaining_count"] > 0]
-    active_installments = [item for item in active_financings if _plan_kind(item.get("category")) == "installment"]
-    active_financing_only = [item for item in active_financings if _plan_kind(item.get("category")) == "financing"]
+    active_installments = [item for item in active_financings if item["plan_type"] == PlanType.INSTALLMENT.value]
+    active_financing_only = [item for item in active_financings if item["plan_type"] == PlanType.FINANCING.value]
     total_financed = float(sum(item["total_amount"] for item in financing_contracts.values()))
     total_financing_remaining = float(sum(item["remaining_amount"] for item in active_financings))
     next_financing = min(active_financings, key=lambda item: item["next_due_date"]) if active_financings else None

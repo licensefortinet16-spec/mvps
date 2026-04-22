@@ -37,6 +37,11 @@ class InstallmentStatus(str, enum.Enum):
     PAID = "paid"
 
 
+class PlanType(str, enum.Enum):
+    INSTALLMENT = "installment"
+    FINANCING = "financing"
+
+
 class DeductionSource(str, enum.Enum):
     UPLOAD = "upload"
     MANUAL = "manual"
@@ -117,6 +122,7 @@ class InstallmentPlan(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     merchant: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    plan_type: Mapped[PlanType] = mapped_column(Enum(PlanType), default=PlanType.INSTALLMENT, nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False, default="Parcelamentos")
     total_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     installment_count: Mapped[int] = mapped_column(nullable=False)

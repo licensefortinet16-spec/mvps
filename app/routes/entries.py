@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_client
-from app.models import DeductionSource, EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, User
+from app.models import DeductionSource, EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, PlanType, User
 from app.services.audit import log_event
 
 
@@ -65,6 +65,7 @@ def create_plan(
     request: Request,
     title: str = Form(...),
     merchant: str = Form(""),
+    plan_type: str = Form(...),
     category: str = Form(...),
     total_amount: str = Form(""),
     installment_amount: str = Form(""),
@@ -89,6 +90,7 @@ def create_plan(
                 "form_values": {
                     "title": title,
                     "merchant": merchant,
+                    "plan_type": plan_type,
                     "category": category,
                     "total_amount": total_amount,
                     "installment_amount": installment_amount,
@@ -104,6 +106,7 @@ def create_plan(
         user_id=user.id,
         title=title,
         merchant=merchant or None,
+        plan_type=PlanType(plan_type),
         category=category,
         total_amount=float(resolved_total_amount),
         installment_count=installment_count,
@@ -149,6 +152,7 @@ def list_plans(request: Request, db: Session = Depends(get_db), user: User = Dep
                 "remaining_count": max(plan.installment_count - paid_count, 0),
                 "installment_amount": installment_amount,
                 "next_installment": next_installment,
+                "plan_type": plan.plan_type.value,
             }
         )
     return request.app.state.templates.TemplateResponse(
@@ -174,6 +178,7 @@ def update_plan(
     request: Request,
     title: str = Form(...),
     merchant: str = Form(""),
+    plan_type: str = Form(...),
     category: str = Form(...),
     total_amount: str = Form(""),
     installment_amount: str = Form(""),
@@ -202,6 +207,7 @@ def update_plan(
                 "form_values": {
                     "title": title,
                     "merchant": merchant,
+                    "plan_type": plan_type,
                     "category": category,
                     "total_amount": total_amount,
                     "installment_amount": installment_amount,
@@ -214,6 +220,7 @@ def update_plan(
 
     plan.title = title
     plan.merchant = merchant or None
+    plan.plan_type = PlanType(plan_type)
     plan.category = category
     plan.total_amount = float(resolved_total_amount)
     plan.installment_count = installment_count

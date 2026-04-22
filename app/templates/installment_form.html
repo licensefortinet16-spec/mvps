@@ -4,7 +4,8 @@
   {% set values = form_values or {} %}
   {% set current_title = values.get('title') if values else (plan.title if plan else '') %}
   {% set current_merchant = values.get('merchant') if values else (plan.merchant if plan else '') %}
-  {% set current_category = values.get('category') if values else (plan.category if plan else 'Financiamentos') %}
+  {% set current_plan_type = values.get('plan_type') if values else (plan.plan_type.value if plan else 'financing') %}
+  {% set current_category = values.get('category') if values else (plan.category if plan else ('Financiamentos' if current_plan_type == 'financing' else 'Parcelamentos')) %}
   {% set current_total = values.get('total_amount') if values else ('{:,.2f}'.format(plan.total_amount).replace(',', 'X').replace('.', ',').replace('X', '.') if plan else '') %}
   {% set current_per_installment = values.get('installment_amount') if values else (('{:,.2f}'.format(plan.installments[0].amount).replace(',', 'X').replace('.', ',').replace('X', '.')) if plan and plan.installments else '') %}
   {% set current_count = values.get('installment_count') if values else (plan.installment_count if plan else '') %}
@@ -14,7 +15,7 @@
       <h1 class="text-3xl font-black text-slate-900">{% if mode == 'edit' %}Editar financiamento ou parcelamento{% else %}Novo parcelamento ou financiamento{% endif %}</h1>
       <p class="mt-2 text-sm text-slate-500">Voce pode informar o valor total do contrato ou o valor da parcela. Para financiamentos longos, use a tela de gestao para editar depois.</p>
     </div>
-    <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Ver financiamentos</a>
+    <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Ver contratos</a>
   </div>
   {% if error %}
   <p class="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{{ error }}</p>
@@ -22,15 +23,19 @@
   <form method="post" action="{% if mode == 'edit' %}/entries/plans/{{ plan.id }}/edit{% else %}/entries/plans/new{% endif %}" class="mt-6 grid gap-4 md:grid-cols-2">
     <input name="title" value="{{ current_title }}" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
     <input name="merchant" value="{{ current_merchant }}" placeholder="Loja ou credor" class="rounded-2xl border border-slate-200 px-4 py-3" />
+    <select name="plan_type" class="rounded-2xl border border-slate-200 px-4 py-3" required>
+      <option value="financing" {% if current_plan_type == 'financing' %}selected{% endif %}>Financiamento</option>
+      <option value="installment" {% if current_plan_type == 'installment' %}selected{% endif %}>Parcelamento</option>
+    </select>
     <input name="category" value="{{ current_category }}" placeholder="Categoria" class="rounded-2xl border border-slate-200 px-4 py-3" required />
     <input name="total_amount" value="{{ current_total }}" type="text" inputmode="decimal" placeholder="Valor total do contrato" class="currency-field rounded-2xl border border-slate-200 px-4 py-3" />
     <input name="installment_amount" value="{{ current_per_installment }}" type="text" inputmode="decimal" placeholder="Valor de cada parcela" class="currency-field rounded-2xl border border-slate-200 px-4 py-3" />
     <input name="installment_count" value="{{ current_count }}" type="number" min="2" placeholder="Quantidade de parcelas" class="rounded-2xl border border-slate-200 px-4 py-3" required />
     <input name="start_date" value="{{ current_start }}" type="date" class="rounded-2xl border border-slate-200 px-4 py-3" required />
     <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 md:col-span-2">
-      Exemplo: se sua moto e 48x de R$ 612,34, voce pode preencher `valor da parcela = 612,34` e `quantidade = 48`. O sistema calcula o total automaticamente.
+      Parcelamento e diferente de financiamento. Use `Parcelamento` para compras parceladas, normalmente no cartao. Use `Financiamento` para contratos com banco ou financeira, como moto, carro ou imovel.
     </div>
-    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">{% if mode == 'edit' %}Salvar alteracoes{% else %}Salvar parcelamento{% endif %}</button>
+    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">{% if mode == 'edit' %}Salvar alteracoes{% else %}Salvar contrato{% endif %}</button>
   </form>
 </div>
 <script>
