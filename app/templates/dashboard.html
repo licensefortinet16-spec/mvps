@@ -35,6 +35,43 @@
   </article>
 </section>
 
+<section class="mt-6 rounded-3xl bg-white p-6 shadow-lg">
+  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-teal-700">Dashboard de Financiamentos</p>
+      <h2 class="mt-2 text-2xl font-black text-slate-900">Visao consolidada dos contratos parcelados</h2>
+      <p class="mt-2 text-sm text-slate-500">Acompanhe saldo contratado, saldo restante, proxima cobranca e distribuicao futura.</p>
+    </div>
+    <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Gerenciar financiamentos</a>
+  </div>
+  <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <article class="rounded-3xl bg-slate-50 p-5">
+      <p class="text-sm text-slate-500">Contratos ativos</p>
+      <p class="mt-2 text-3xl font-black text-slate-900">{{ snapshot.active_financing_count }}</p>
+    </article>
+    <article class="rounded-3xl bg-slate-50 p-5">
+      <p class="text-sm text-slate-500">Valor contratado</p>
+      <p class="mt-2 text-3xl font-black text-slate-900">R$ {{ snapshot.total_financed|brl }}</p>
+    </article>
+    <article class="rounded-3xl bg-slate-50 p-5">
+      <p class="text-sm text-slate-500">Saldo restante</p>
+      <p class="mt-2 text-3xl font-black text-rose-600">R$ {{ snapshot.total_financing_remaining|brl }}</p>
+    </article>
+    <article class="rounded-3xl bg-slate-900 p-5">
+      <p class="text-sm text-slate-300">Proxima parcela</p>
+      {% if snapshot.next_financing %}
+      <p class="mt-2 text-lg font-black text-white">{{ snapshot.next_financing.title }}</p>
+      <p class="mt-1 text-sm text-slate-300">R$ {{ snapshot.next_financing.next_amount|brl }} • {{ snapshot.next_financing.next_due_date }}</p>
+      {% else %}
+      <p class="mt-2 text-lg font-black text-white">Nenhuma pendencia</p>
+      {% endif %}
+    </article>
+  </div>
+  <div class="mt-6 h-72">
+    <canvas id="financingChart"></canvas>
+  </div>
+</section>
+
 {% if latest_payslip %}
 <section class="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
   <article class="rounded-3xl bg-white p-6 shadow-lg">
@@ -241,6 +278,7 @@
   const monthly = {{ snapshot.monthly_chart|tojson }};
   const categories = {{ snapshot.category_chart|tojson }};
   const deductions = {{ snapshot.deduction_chart|tojson }};
+  const financing = {{ snapshot.financing_chart|tojson }};
   new Chart(document.getElementById("monthlyChart"), {
     type: "bar",
     data: {
@@ -271,6 +309,21 @@
       maintainAspectRatio: false,
       indexAxis: "y"
     }
+  });
+  new Chart(document.getElementById("financingChart"), {
+    type: "line",
+    data: {
+      labels: financing.map(item => item.month),
+      datasets: [{
+        label: "Parcelas futuras",
+        data: financing.map(item => item.amount),
+        borderColor: "#0f766e",
+        backgroundColor: "rgba(15,118,110,0.12)",
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
   });
 </script>
 {% endblock %}

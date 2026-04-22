@@ -60,9 +60,29 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
 
     today = date.today()
     upcoming_installments = []
+    financing_contracts: dict[int, dict] = {}
+    financing_by_month = defaultdict(Decimal)
     for installment, plan in installments:
+        contract = financing_contracts.setdefault(
+            plan.id,
+            {
+                "title": plan.title,
+                "total_amount": Decimal(plan.total_amount),
+                "installment_count": plan.installment_count,
+                "remaining_amount": Decimal("0"),
+                "remaining_count": 0,
+                "next_amount": None,
+                "next_due_date": None,
+            },
+        )
         if installment.due_date < today or installment.status.value == "paid":
             continue
+        financing_by_month[_month_key(installment.due_date)] += Decimal(installment.amount)
+        contract["remaining_amount"] += Decimal(installment.amount)
+        contract["remaining_count"] += 1
+        if contract["next_due_date"] is None:
+            contract["next_due_date"] = installment.due_date.isoformat()
+            contract["next_amount"] = float(installment.amount)
         upcoming_installments.append(
             {
                 "title": plan.title,
@@ -95,6 +115,14 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
         for deduction in deductions[:8]
     ]
     deduction_total = float(sum(deduction_totals.values()))
+    active_financings = [item for item in financing_contracts.values() if item["remaining_count"] > 0]
+    total_financed = float(sum(item["total_amount"] for item in financing_contracts.values()))
+    total_financing_remaining = float(sum(item["remaining_amount"] for item in active_financings))
+    next_financing = min(active_financings, key=lambda item: item["next_due_date"]) if active_financings else None
+    financing_chart = [
+        {"month": month, "amount": float(amount)}
+        for month, amount in sorted(financing_by_month.items())[:12]
+    ]
 
     forecast = build_forecast(monthly_chart, upcoming_installments)
 
@@ -104,6 +132,11 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
         "net": float(totals["income"] - totals["expense"]),
         "deduction_total": deduction_total,
         "upcoming_installment_count": len(upcoming_installments),
+        "active_financing_count": len(active_financings),
+        "total_financed": total_financed,
+        "total_financing_remaining": total_financing_remaining,
+        "next_financing": next_financing,
+        "financing_chart": financing_chart,
         "monthly_chart": monthly_chart,
         "category_chart": category_chart,
         "deduction_chart": deduction_chart,
