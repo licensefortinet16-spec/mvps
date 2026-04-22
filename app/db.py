@@ -21,7 +21,7 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(normalize_database_url(settings.database_url), future=True, pool_pre_ping=True)
+engine = create_engine(normalize_database_url(settings.resolved_database_url), future=True, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
