@@ -24,7 +24,12 @@
             <h3 class="text-xl font-black text-slate-900">{{ plan.title }}</h3>
             <p class="mt-1 text-sm text-slate-500">{{ plan.merchant or 'Credor nao informado' }} • {{ plan.category }}</p>
           </div>
-          <a href="/entries/plans/{{ plan.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+          <div class="flex gap-2">
+            <a href="/entries/plans/{{ plan.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+            <form method="post" action="/entries/plans/{{ plan.id }}/delete" onsubmit="return confirm('Excluir este financiamento?');">
+              <button class="rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">Excluir</button>
+            </form>
+          </div>
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-4">
           <div class="rounded-2xl bg-slate-50 p-4"><p class="text-sm text-slate-500">Valor total</p><p class="mt-2 text-xl font-black text-slate-900">R$ {{ plan.total_amount|brl }}</p></div>
@@ -51,7 +56,12 @@
             <h3 class="text-xl font-black text-slate-900">{{ plan.title }}</h3>
             <p class="mt-1 text-sm text-slate-500">{{ plan.merchant or 'Loja nao informada' }} • {{ plan.category }}</p>
           </div>
-          <a href="/entries/plans/{{ plan.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+          <div class="flex gap-2">
+            <a href="/entries/plans/{{ plan.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+            <form method="post" action="/entries/plans/{{ plan.id }}/delete" onsubmit="return confirm('Excluir este parcelamento?');">
+              <button class="rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">Excluir</button>
+            </form>
+          </div>
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-4">
           <div class="rounded-2xl bg-slate-50 p-4"><p class="text-sm text-slate-500">Valor total</p><p class="mt-2 text-xl font-black text-slate-900">R$ {{ plan.total_amount|brl }}</p></div>

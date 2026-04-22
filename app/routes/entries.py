@@ -238,6 +238,17 @@ def update_plan(
     return RedirectResponse("/entries/plans", status_code=303)
 
 
+@router.post("/plans/{plan_id}/delete")
+def delete_plan(plan_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    plan = db.get(InstallmentPlan, plan_id)
+    if not plan or plan.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries/plans", status_code=303)
+    db.delete(plan)
+    db.commit()
+    log_event(db, "installments.delete_plan", user=user, metadata={"plan_id": plan_id})
+    return RedirectResponse("/entries/plans", status_code=303)
+
+
 @router.get("/deductions/new")
 def new_deduction(request: Request, user: User = Depends(get_current_client)):
     return request.app.state.templates.TemplateResponse("deduction_form.html", {"request": request})
