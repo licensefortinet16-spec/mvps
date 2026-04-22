@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import SessionLocal, get_db
+from app.db import get_db
 from app.deps import get_current_client
 from app.models import Document, DocumentType, User
 from app.services.audit import log_event
@@ -17,14 +17,6 @@ from app.services.documents import process_document, sync_payslip_outputs
 
 router = APIRouter(prefix="/uploads")
 settings = get_settings()
-
-
-def _background_process(document_id: int) -> None:
-    db = SessionLocal()
-    try:
-        process_document(db, document_id)
-    finally:
-        db.close()
 
 
 @router.get("")
@@ -43,7 +35,6 @@ def uploads_page(request: Request, db: Session = Depends(get_db), user: User = D
 
 @router.post("")
 async def create_upload(
-    background_tasks: BackgroundTasks,
     document_type: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -67,8 +58,7 @@ async def create_upload(
     db.commit()
     db.refresh(document)
     log_event(db, "documents.uploaded", user=user, metadata={"document_id": document.id, "type": document_type})
-
-    background_tasks.add_task(_background_process, document.id)
+    process_document(db, document.id)
     return RedirectResponse("/uploads", status_code=303)
 
 
