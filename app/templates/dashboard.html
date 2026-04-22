@@ -48,8 +48,8 @@
   <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
     <div>
       <p class="text-sm font-semibold uppercase tracking-[0.24em] text-teal-700">Dashboard de Financiamentos</p>
-      <h2 class="mt-2 text-2xl font-black text-slate-900">Visao consolidada dos contratos parcelados</h2>
-      <p class="mt-2 text-sm text-slate-500">Acompanhe saldo contratado, saldo restante, proxima cobranca e distribuicao futura.</p>
+      <h2 class="mt-2 text-2xl font-black text-slate-900">Contratos com banco ou financeira</h2>
+      <p class="mt-2 text-sm text-slate-500">Acompanhe saldo contratado, saldo restante, proxima cobranca e distribuicao futura dos financiamentos.</p>
     </div>
     <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Gerenciar financiamentos</a>
   </div>
@@ -78,6 +78,33 @@
   </div>
   <div class="mt-6 h-72">
     <canvas id="financingChart"></canvas>
+  </div>
+</section>
+
+<section class="mt-6 rounded-3xl bg-white p-6 shadow-lg">
+  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.24em] text-amber-700">Dashboard de Parcelamentos</p>
+      <h2 class="mt-2 text-2xl font-black text-slate-900">Compras parceladas, normalmente no cartao</h2>
+      <p class="mt-2 text-sm text-slate-500">Esse bloco existe para separar compras parceladas dos financiamentos bancarios.</p>
+    </div>
+    <a href="/entries/plans" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Gerenciar parcelamentos</a>
+  </div>
+  <div class="mt-6 grid gap-4 md:grid-cols-3">
+    <article class="rounded-3xl bg-amber-50 p-5">
+      <p class="text-sm text-amber-700">Parcelamentos ativos</p>
+      <p class="mt-2 text-3xl font-black text-slate-900">{{ snapshot.active_installment_plan_count }}</p>
+    </article>
+    <article class="rounded-3xl bg-amber-50 p-5">
+      <p class="text-sm text-amber-700">Natureza</p>
+      <p class="mt-2 text-2xl font-black text-slate-900">Compra parcelada</p>
+      <p class="mt-1 text-sm text-slate-500">Usado para cartao e compras em loja.</p>
+    </article>
+    <article class="rounded-3xl bg-slate-900 p-5">
+      <p class="text-sm text-slate-300">Separacao de tipos</p>
+      <p class="mt-2 text-lg font-black text-white">Parcelamento nao e financiamento</p>
+      <p class="mt-1 text-sm text-slate-300">Moto, carro e imovel ficam no bloco de financiamentos.</p>
+    </article>
   </div>
 </section>
 
