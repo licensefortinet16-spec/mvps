@@ -29,11 +29,15 @@ from app.models import (
 
 
 AMOUNT_PATTERN = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})")
+# Also matches truncated amounts with only 1 decimal digit (OCR artifact: "31,7" instead of "31,72")
+_AMOUNT_LOOSE = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{1,2})")
 # Matches weight/unit-price format: "0,4 KG x 79,30" or "2 UN x 15,00"
 _QTY_UNIT_PRICE_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*(?:kg|un|g|l|ml|pc|pct|cx|lt)\s*x\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
     re.IGNORECASE,
 )
+# Tax approximation lines printed after each item — must never be used as line totals
+_TAX_APPROX_RE = re.compile(r"aprox|imposto", re.IGNORECASE)
 INSTALLMENT_PATTERN = re.compile(r"(?P<label>[\w\s\-/]+?)\s+(?P<current>\d{1,2})/(?P<total>\d{1,2})\s+(?P<amount>\d{1,3}(?:\.\d{3})*,\d{2})", re.IGNORECASE)
 COMPETENCE_PATTERN = re.compile(r"(?:competencia|referencia|periodo)\s*[:\-]?\s*([0-1]?\d[/\-]\d{4})", re.IGNORECASE)
 NAME_PATTERN = re.compile(r"(?:nome|colaborador|funcionario)\s*[:\-]?\s*(.+)", re.IGNORECASE)
@@ -316,8 +320,12 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
     Handles weight-based items where the receipt prints:
         001 843 BISCOITO DE NATA  0,4 KG x 79,30   ← unit price per kg
                                         31,72        ← actual line total (next line)
-    In this case the code peeks at the next line for a standalone amount, or
-    falls back to computing qty × unit_price.
+                (Vir Aprox. Impostos R$ 8,07)        ← tax info — must be ignored
+
+    Resolution priority for the line total:
+      1. Amount after the unit price on the SAME line (handles OCR-merged lines)
+      2. Standalone amount on the NEXT line, if not a tax/approximation line
+      3. Arithmetic: qty × unit_price
     """
     items: list[dict] = []
     i = 0
@@ -326,6 +334,11 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
         normalized = normalize_text(line)
         if "valor total" in normalized or "forma de pagamento" in normalized:
             break
+
+        # Skip tax approximation lines entirely
+        if _TAX_APPROX_RE.search(line):
+            i += 1
+            continue
 
         amount = extract_amount_from_line(line)
         if amount is None:
@@ -339,27 +352,50 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
         # Detect weight/unit-price pattern: "0,4 KG x 79,30"
         qty_match = _QTY_UNIT_PRICE_RE.search(line)
         if qty_match:
-            # The last AMOUNT_PATTERN match on this line is the unit price, not the total.
-            # Strategy 1: peek at the next line for a standalone amount (most reliable)
-            peeked = None
-            if i + 1 < len(lines):
-                next_line = lines[i + 1]
-                next_amounts = AMOUNT_PATTERN.findall(next_line)
-                # Accept next line if it has exactly one amount and no product code
-                if len(next_amounts) == 1 and not re.search(r"\b\d{3,}\b", next_line):
-                    peeked = _parse_br_float(next_amounts[0])
-                    i += 1  # consume the line-total line so it isn't processed again
+            resolved = None
 
-            if peeked is not None:
-                amount = peeked
-            else:
-                # Strategy 2: compute qty × unit_price
-                try:
-                    qty = _parse_br_float(qty_match.group(1))
-                    unit_price = _parse_br_float(qty_match.group(2))
-                    amount = round(qty * unit_price, 2)
-                except (ValueError, IndexError):
-                    pass  # keep last amount from the line as a fallback
+            # Strategy 1: arithmetic — qty × unit_price (mathematically exact;
+            # preferred over OCR readings which can be truncated by column wrapping)
+            try:
+                qty = _parse_br_float(qty_match.group(1))
+                unit_price = _parse_br_float(qty_match.group(2))
+                resolved = round(qty * unit_price, 2)
+            except (ValueError, IndexError):
+                pass
+
+            # Strategy 2: peek next non-empty, non-tax line for a standalone amount
+            if resolved is None:
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines):
+                    next_line = lines[j]
+                    next_amounts = AMOUNT_PATTERN.findall(next_line)
+                    if (
+                        len(next_amounts) == 1
+                        and not re.search(r"\b\d{3,}\b", next_line)
+                        and not _TAX_APPROX_RE.search(next_line)
+                    ):
+                        resolved = _parse_br_float(next_amounts[0])
+                        i = j  # consume the line-total line
+
+            # Strategy 3: amount after the unit price on the same line (OCR may
+            # merge columns; accept 1-decimal truncations like "31,7" → 31.70)
+            if resolved is None:
+                unit_price_end = qty_match.end()
+                after_unit_price = line[unit_price_end:]
+                loose_matches = _AMOUNT_LOOSE.findall(after_unit_price)
+                if loose_matches:
+                    raw = loose_matches[0]
+                    if re.match(r"^\d{1,3}(?:\.\d{3})*,\d$", raw):
+                        raw = raw + "0"
+                    try:
+                        resolved = _parse_br_float(raw)
+                    except ValueError:
+                        pass
+
+            if resolved is not None:
+                amount = resolved
 
         label = _clean_receipt_label(line)
         if len(label) < 4:
