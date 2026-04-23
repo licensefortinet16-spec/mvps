@@ -12,10 +12,12 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_client
 from app.models import (
-    DeductionSource, EntryType, FinancialEntry, Installment, InstallmentPlan,
+    DeductionSource, Document, DocumentStatus, DocumentType,
+    EntryType, FinancialEntry, Installment, InstallmentPlan,
     PayslipDeduction, PlanType, RecurringExpense, RecurringFrequency, User, UserCategory,
 )
 from app.services.audit import log_event
+from app.services.documents import categorize_merchant
 
 
 router = APIRouter(prefix="/entries")
@@ -30,11 +32,63 @@ def _get_categories(db: Session, tenant_id: int) -> list[str]:
     return all_cats
 
 
+def _get_document_items(db: Session, tenant_id: int) -> list[dict]:
+    """Return recent items extracted from processed documents for quick-fill."""
+    docs = db.execute(
+        select(Document)
+        .where(Document.tenant_id == tenant_id, Document.status == DocumentStatus.PROCESSED)
+        .order_by(Document.processed_at.desc())
+        .limit(10)
+    ).scalars().all()
+
+    suggestions: list[dict] = []
+    for doc in docs:
+        data = doc.extracted_data or {}
+        summary = data.get("summary") or {}
+        occurred_on = summary.get("occurred_on") or ""
+        items = data.get("items") or []
+
+        if doc.document_type == DocumentType.PAYSLIP:
+            net = summary.get("net_income")
+            if net:
+                competence = summary.get("competence") or doc.filename
+                suggestions.append({
+                    "label": f"Holerite {competence}",
+                    "amount": float(net),
+                    "occurred_on": occurred_on,
+                    "category": "Salario",
+                    "entry_type": "income",
+                    "source_doc": doc.filename,
+                })
+        else:
+            for item in items[:8]:
+                label = item.get("label", "")
+                amount = item.get("amount")
+                if not label or not amount:
+                    continue
+                suggestions.append({
+                    "label": label,
+                    "amount": float(amount),
+                    "occurred_on": occurred_on,
+                    "category": categorize_merchant(label),
+                    "entry_type": "expense",
+                    "source_doc": doc.filename,
+                })
+
+    return suggestions[:30]
+
+
 @router.get("/new")
 def new_entry(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
     return request.app.state.templates.TemplateResponse(
         "entry_form.html",
-        {"request": request, "entry": None, "mode": "create", "categories": _get_categories(db, user.tenant_id)},
+        {
+            "request": request,
+            "entry": None,
+            "mode": "create",
+            "categories": _get_categories(db, user.tenant_id),
+            "doc_items": _get_document_items(db, user.tenant_id),
+        },
     )
 
 

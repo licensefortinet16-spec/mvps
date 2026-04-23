@@ -2,9 +2,41 @@
 {% block content %}
 <div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
   <h1 class="text-3xl font-black text-slate-900">{% if mode == 'edit' %}Editar lancamento{% else %}Novo lancamento manual{% endif %}</h1>
+
+  {# ── Quick-fill from document items ──────────────────────────────────── #}
+  {% if mode != 'edit' and doc_items %}
+  <div class="mt-5">
+    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Importar de documento</p>
+    <select id="doc-item-select" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+      <option value="">— selecione um item extraido —</option>
+      {% set ns = namespace(last_doc='') %}
+      {% for item in doc_items %}
+        {% if item.source_doc != ns.last_doc %}
+          {% if ns.last_doc %}</optgroup>{% endif %}
+          <optgroup label="{{ item.source_doc }}">
+          {% set ns.last_doc = item.source_doc %}
+        {% endif %}
+        <option
+          value=""
+          data-label="{{ item.label }}"
+          data-amount="{{ '%.2f'|format(item.amount) }}"
+          data-date="{{ item.occurred_on or '' }}"
+          data-category="{{ item.category }}"
+          data-type="{{ item.entry_type }}"
+        >{{ item.label }} — R$ {{ item.amount|brl }}</option>
+      {% endfor %}
+      {% if ns.last_doc %}</optgroup>{% endif %}
+    </select>
+  </div>
+  <div class="my-5 flex items-center gap-3 text-xs text-slate-300">
+    <div class="h-px flex-1 bg-slate-100"></div>ou preencha manualmente<div class="h-px flex-1 bg-slate-100"></div>
+  </div>
+  {% endif %}
+
   {% set action = "/entries/" ~ entry.id ~ "/edit" if mode == 'edit' else "/entries/new" %}
-  <form method="post" action="{{ action }}" class="mt-6 grid gap-4 md:grid-cols-2">
+  <form method="post" action="{{ action }}" class="grid gap-4 md:grid-cols-2">
     <input
+      id="f-title"
       name="title"
       placeholder="Titulo"
       value="{{ entry.title if entry else '' }}"
@@ -14,7 +46,7 @@
     <div class="flex flex-col gap-1">
       <input
         name="category"
-        id="category"
+        id="f-category"
         list="category-list"
         placeholder="Categoria"
         value="{{ entry.category if entry else '' }}"
@@ -27,11 +59,12 @@
         {% endfor %}
       </datalist>
     </div>
-    <select name="entry_type" class="rounded-2xl border border-slate-200 px-4 py-3" required>
+    <select id="f-type" name="entry_type" class="rounded-2xl border border-slate-200 px-4 py-3" required>
       <option value="income" {% if entry and entry.entry_type.value == 'income' %}selected{% endif %}>Receita</option>
       <option value="expense" {% if not entry or entry.entry_type.value == 'expense' %}selected{% endif %}>Despesa</option>
     </select>
     <input
+      id="f-amount"
       name="amount"
       type="number"
       step="0.01"
@@ -42,6 +75,7 @@
       required
     />
     <input
+      id="f-date"
       name="occurred_on"
       type="date"
       value="{{ entry.occurred_on.isoformat() if entry else '' }}"
@@ -58,4 +92,22 @@
   <p class="mt-4 text-sm text-slate-500">Para adicionar categorias personalizadas, acesse <a href="/categories" class="font-semibold text-teal-700">Categorias</a>.</p>
   {% endif %}
 </div>
+
+<script>
+  const sel = document.getElementById("doc-item-select");
+  if (sel) {
+    sel.addEventListener("change", function () {
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.dataset.label) return;
+      document.getElementById("f-title").value    = opt.dataset.label;
+      document.getElementById("f-amount").value   = opt.dataset.amount;
+      document.getElementById("f-category").value = opt.dataset.category;
+      const ftype = document.getElementById("f-type");
+      for (let o of ftype.options) o.selected = (o.value === opt.dataset.type);
+      if (opt.dataset.date) document.getElementById("f-date").value = opt.dataset.date;
+      // Reset select to placeholder after fill
+      sel.selectedIndex = 0;
+    });
+  }
+</script>
 {% endblock %}
