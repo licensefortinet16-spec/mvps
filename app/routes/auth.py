@@ -151,7 +151,7 @@ def _send_reset_email(to_email: str, reset_url: str) -> None:
     msg["Subject"] = "Recuperacao de senha — Financa"
     msg["From"] = settings.smtp_from or settings.smtp_user
     msg["To"] = to_email
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
         server.starttls()
         server.login(settings.smtp_user, settings.smtp_password)
         server.sendmail(msg["From"], [to_email], msg.as_string())
