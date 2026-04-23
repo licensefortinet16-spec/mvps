@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    resend_api_key: str = ""
+    resend_from: str = "Financa <noreply@financa.app>"
     app_base_url: str = ""
     groq_api_key: str = ""
 

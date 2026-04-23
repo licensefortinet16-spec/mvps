@@ -5,6 +5,8 @@ import smtplib
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
+import resend
+
 from slugify import slugify
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, Form, Request
@@ -143,6 +145,22 @@ def logout(request: Request):
 
 
 def _send_reset_email(to_email: str, reset_url: str) -> None:
+    if settings.resend_api_key:
+        resend.api_key = settings.resend_api_key
+        resend.Emails.send({
+            "from": settings.resend_from,
+            "to": [to_email],
+            "subject": "Recuperacao de senha — Financa",
+            "text": (
+                f"Voce solicitou a recuperacao de senha.\n\n"
+                f"Clique no link abaixo para redefinir sua senha (valido por 1 hora):\n\n"
+                f"{reset_url}\n\n"
+                f"Se nao foi voce, ignore este e-mail."
+            ),
+        })
+        return
+
+    # Fallback: SMTP
     msg = MIMEText(
         f"Voce solicitou a recuperacao de senha.\n\nClique no link abaixo para redefinir sua senha (valido por 1 hora):\n\n{reset_url}\n\nSe nao foi voce, ignore este e-mail.",
         "plain",
@@ -184,7 +202,7 @@ def forgot_password(request: Request, email: str = Form(...), db: Session = Depe
             host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
             base = f"{proto}://{host}"
         reset_url = f"{base}/reset-password?token={token_value}"
-        if settings.smtp_host and settings.smtp_user:
+        if settings.resend_api_key or (settings.smtp_host and settings.smtp_user):
             try:
                 _send_reset_email(user.email, reset_url)
                 email_sent = True
