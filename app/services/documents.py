@@ -605,6 +605,112 @@ def _analyze_image_with_groq(image_path: Path, filename: str) -> tuple[DocumentT
         return None
 
 
+def _analyze_text_with_groq(text: str, filename: str) -> tuple[DocumentType, dict, float] | None:
+    """Send extracted text to Groq Llama (text model) for type detection + extraction.
+
+    Used for PDFs and TXT files where vision is not available.
+    Returns (detected_type, extracted_data, confidence) or None on failure/no key.
+    """
+    from app.config import get_settings
+    api_key = get_settings().groq_api_key
+    if not api_key:
+        return None
+
+    # Truncate to fit context — first 3000 chars cover most documents
+    text_snippet = text[:3000].strip()
+    if not text_snippet:
+        return None
+
+    prompt = f"""\
+Analise o texto abaixo extraído de um documento financeiro brasileiro.
+Identifique o tipo do documento e extraia os dados. Retorne SOMENTE um JSON válido, sem markdown.
+
+{_GROQ_UNIFIED_PROMPT}
+
+TEXTO DO DOCUMENTO:
+\"\"\"
+{text_snippet}
+\"\"\"
+"""
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=api_key)
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1024,
+            temperature=0.1,
+        )
+
+        raw = response.choices[0].message.content or ""
+        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw.strip())
+        data = json.loads(raw)
+
+        # Reuse the same parsing logic as the vision path
+        doc_type_str = (data.get("document_type") or "receipt").lower()
+        if doc_type_str == "payslip":
+            detected_type = DocumentType.PAYSLIP
+        elif doc_type_str == "credit_card":
+            detected_type = DocumentType.CREDIT_CARD
+        else:
+            detected_type = DocumentType.RECEIPT
+
+        if detected_type == DocumentType.PAYSLIP:
+            def _f(key: str) -> float | None:
+                v = data.get(key)
+                return float(v) if v is not None else None
+
+            summary = {
+                "employee_name": data.get("employee_name"),
+                "company_name": data.get("company_name"),
+                "competence": data.get("competence"),
+                "gross_income": _f("gross_income"),
+                "net_income": _f("net_income"),
+                "discounts": _f("discounts"),
+                "inss": _f("inss"),
+                "irrf": _f("irrf"),
+                "vt": _f("vt"),
+                "vr": _f("vr"),
+            }
+            filled = sum(1 for k in ("gross_income", "net_income", "discounts", "inss", "irrf") if summary[k] is not None)
+            confidence = min(0.50 + filled * 0.09, 0.95)
+            extracted_data = {
+                "document_kind": "payslip",
+                "filename": filename,
+                "summary": summary,
+                "items": [],
+                "extracted_by": "groq-llama-text",
+            }
+        else:
+            items = [
+                {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
+                for it in (data.get("items") or [])
+                if it.get("label") and it.get("amount") is not None
+            ]
+            total = data.get("total")
+            if total is None and items:
+                total = round(sum(i["amount"] for i in items), 2)
+            occurred_on = _parse_any_date(data.get("date"))
+            summary = {
+                "merchant": (data.get("merchant") or filename)[:160],
+                "detected_total": float(total) if total is not None else None,
+                "occurred_on": occurred_on.isoformat() if occurred_on else None,
+                "document_kind": doc_type_str,
+                "extracted_by": "groq-llama-text",
+            }
+            confidence = 0.92 if total is not None else 0.65
+            extracted_data = {"summary": summary, "items": items}
+
+        return detected_type, extracted_data, confidence
+
+    except Exception as exc:
+        logging.warning("Groq text analysis failed, falling back to Tesseract: %s", exc)
+        return None
+
+
 def extract_receipt_data(text: str, filename: str, document_type: DocumentType) -> tuple[dict, float]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     total = extract_receipt_total(lines)
@@ -895,10 +1001,14 @@ def process_document(db: Session, document_id: int) -> None:
         extracted_data: dict = {"summary": {}, "items": []}
         confidence = 0.45
 
-        # ── Groq Vision: auto-detect type + extract (images only) ──────────────
-        # Overrides the user's document_type selection when the LLM disagrees,
-        # preventing e.g. a receipt uploaded as "payslip" from creating fake income.
-        groq_result = _analyze_image_with_groq(stored_path, document.filename)
+        # ── LLM analysis: every upload goes through Groq ──────────────────────
+        # Images → Llama Vision;  PDFs/TXT → Llama text model (extracted text).
+        # Falls back to Tesseract-only pipeline when GROQ_API_KEY is not set.
+        if stored_path.suffix.lower() in _GROQ_IMAGE_SUFFIXES:
+            groq_result = _analyze_image_with_groq(stored_path, document.filename)
+        else:
+            groq_result = _analyze_text_with_groq(text, document.filename)
+
         if groq_result is not None:
             detected_type, extracted_data, confidence = groq_result
             if detected_type != document.document_type:
@@ -925,19 +1035,13 @@ def process_document(db: Session, document_id: int) -> None:
                         amount=round(total_amount, 2),
                         occurred_on=occurred_on,
                         source="upload",
-                        notes="Lancamento gerado por visao LLM (Groq)",
+                        notes="Lancamento gerado por LLM (Groq)",
                     ))
 
-        # ── Tesseract fallback (PDFs, or when Groq is not configured/failed) ───
+        # ── Tesseract-only fallback (GROQ_API_KEY not set or Groq call failed) ─
         else:
-            # Auto-detect type from filename + extracted text to correct wrong
-            # user selections (e.g. payslip PDF uploaded as "credit_card").
             detected = _detect_type_from_text(document.filename, text)
             if detected is not None and detected != document.document_type:
-                logging.info(
-                    "document %s: user selected %s but text analysis detected %s — overriding",
-                    document_id, document.document_type, detected,
-                )
                 document.document_type = detected
 
             if document.document_type == DocumentType.PAYSLIP:

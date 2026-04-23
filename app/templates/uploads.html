@@ -31,8 +31,8 @@
               <span class="font-semibold {% if is_failed %}text-rose-600{% elif is_pending %}text-amber-600{% else %}text-teal-700{% endif %}">{{ document.status.value }}</span>
               {% if is_processed %} • confianca {{ "%.0f"|format(document.confidence * 100) }}%{% endif %}
               {% set extracted_by = document.extracted_data.get('extracted_by') or (document.extracted_data.get('summary') or {}).get('extracted_by') %}
-              {% if extracted_by == 'groq-llama-vision' %}
-              • <span class="text-violet-600 font-semibold">IA</span>
+              {% if extracted_by in ['groq-llama-vision', 'groq-llama-text'] %}
+              • <span class="text-violet-600 font-semibold" title="{{ extracted_by }}">IA</span>
               {% endif %}
             </p>
             {% if is_failed and document.extracted_data and document.extracted_data.get('error') %}
