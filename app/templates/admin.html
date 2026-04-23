@@ -1,36 +1,108 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Tenants</p><p class="mt-3 text-3xl font-black">{{ stats.tenants }}</p></article>
-  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Usuarios</p><p class="mt-3 text-3xl font-black">{{ stats.users }}</p></article>
-  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Documentos</p><p class="mt-3 text-3xl font-black">{{ stats.documents }}</p></article>
-  <article class="rounded-3xl bg-white p-6 shadow-lg"><p class="text-sm text-slate-500">Lancamentos</p><p class="mt-3 text-3xl font-black">{{ stats.entries }}</p></article>
-  <article class="rounded-3xl bg-slate-900 p-6 shadow-lg"><p class="text-sm text-slate-300">Eventos de auditoria</p><p class="mt-3 text-3xl font-black text-white">{{ stats.events }}</p></article>
+
+<section class="mb-6">
+  <p class="text-xs font-semibold uppercase tracking-widest text-teal-600">Administracao</p>
+  <h1 class="mt-1 text-2xl font-black text-slate-900">Metricas da plataforma</h1>
+  <p class="mt-1 text-sm text-slate-400">Dados agregados de uso. Nenhum conteudo financeiro de clientes e exibido aqui.</p>
 </section>
 
-<section class="mt-6 rounded-3xl bg-white p-8 shadow-xl">
-  <h1 class="text-3xl font-black text-slate-900">Uso da plataforma</h1>
-  <p class="mt-2 text-sm text-slate-500">Esta area nao exibe dados de clientes nem detalhes por tenant.</p>
-  <div class="mt-6 overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="text-left text-slate-500">
-        <tr>
-          <th class="pb-3">Status do documento</th>
-          <th class="pb-3">Quantidade</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for status, count in document_status %}
-        <tr class="border-t border-slate-100">
-          <td class="py-3">{{ status.value }}</td>
-          <td class="py-3 font-bold">{{ count }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="2" class="py-4 text-slate-500">Sem dados agregados ainda.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+{# ── Stats ───────────────────────────────────────────────────────────────── #}
+<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+
+  <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Tenants</p>
+    <p class="mt-3 text-4xl font-black text-slate-900">{{ stats.tenants }}</p>
+    <p class="mt-1 text-xs text-slate-400">Contas registradas</p>
+  </article>
+
+  <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Usuarios</p>
+    <p class="mt-3 text-4xl font-black text-slate-900">{{ stats.users }}</p>
+    <p class="mt-1 text-xs text-slate-400">Perfil cliente</p>
+  </article>
+
+  <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Documentos</p>
+    <p class="mt-3 text-4xl font-black text-slate-900">{{ stats.documents }}</p>
+    <p class="mt-1 text-xs text-slate-400">Total enviados</p>
+  </article>
+
+  <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Lancamentos</p>
+    <p class="mt-3 text-4xl font-black text-slate-900">{{ stats.entries }}</p>
+    <p class="mt-1 text-xs text-slate-400">Financeiros registrados</p>
+  </article>
+
+  <article class="rounded-2xl bg-slate-900 p-5 shadow-sm">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Auditoria</p>
+    <p class="mt-3 text-4xl font-black text-white">{{ stats.events }}</p>
+    <p class="mt-1 text-xs text-slate-500">Eventos registrados</p>
+  </article>
+
 </section>
+
+{# ── Document processing ─────────────────────────────────────────────────── #}
+<section class="mt-6 grid gap-6 xl:grid-cols-2">
+
+  <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+    <h2 class="text-base font-bold text-slate-900">Processamento de documentos</h2>
+    <p class="text-xs text-slate-400">Distribuicao por status</p>
+
+    {% set status_colors = {"processed": ("bg-teal-500", "text-teal-700", "bg-teal-50"), "failed": ("bg-rose-500", "text-rose-700", "bg-rose-50"), "pending": ("bg-amber-400", "text-amber-700", "bg-amber-50")} %}
+    {% set total_docs = stats.documents %}
+
+    <div class="mt-5 space-y-3">
+      {% for status, count in document_status %}
+      {% set colors = status_colors.get(status.value, ("bg-slate-400", "text-slate-700", "bg-slate-50")) %}
+      <div>
+        <div class="flex items-center justify-between text-sm">
+          <div class="flex items-center gap-2">
+            <span class="inline-block h-2.5 w-2.5 rounded-full {{ colors[0] }}"></span>
+            <span class="font-semibold {{ colors[1] }} capitalize">{{ status.value }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-black text-slate-900">{{ count }}</span>
+            {% if total_docs > 0 %}
+            <span class="text-xs text-slate-400">{{ "%.0f"|format(count / total_docs * 100) }}%</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if total_docs > 0 %}
+        <div class="mt-1.5 h-1.5 w-full rounded-full bg-slate-100">
+          <div class="{{ colors[0] }} h-1.5 rounded-full" style="width: {{ "%.1f"|format(count / total_docs * 100) }}%"></div>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-400">Nenhum documento enviado ainda.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+    <h2 class="text-base font-bold text-slate-900">Notas operacionais</h2>
+    <p class="text-xs text-slate-400">Limites e garantias de privacidade</p>
+    <ul class="mt-5 space-y-3 text-sm text-slate-600">
+      <li class="flex items-start gap-2">
+        <span class="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500"></span>
+        Dados financeiros de clientes nao sao acessiveis nesta area.
+      </li>
+      <li class="flex items-start gap-2">
+        <span class="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500"></span>
+        Isolamento por tenant e garantido em todas as queries.
+      </li>
+      <li class="flex items-start gap-2">
+        <span class="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span>
+        Documentos em status <strong>pending</strong> por mais de 10 minutos sao marcados como <strong>failed</strong> automaticamente.
+      </li>
+      <li class="flex items-start gap-2">
+        <span class="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300"></span>
+        Todos os eventos de acesso sao registrados em auditoria.
+      </li>
+    </ul>
+  </article>
+
+</section>
+
 {% endblock %}
-

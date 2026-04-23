@@ -7,52 +7,54 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      background:
-        radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 28%),
-        radial-gradient(circle at bottom right, rgba(251, 191, 36, 0.18), transparent 22%),
-        #f8fafc;
-    }
+    body { background: #f8fafc; }
   </style>
 </head>
 <body class="min-h-screen text-slate-900">
-  {% set current_path = request.url.path %}
-  {% set user_role = request.session.get("user_role") %}
-  <div class="min-h-screen">
-    {% if request.session.get("user_id") %}
-    <header class="border-b border-slate-200 bg-white/80 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          {% if user_role == "admin" %}
-          <a href="/admin" class="text-2xl font-black tracking-tight text-teal-700">Financa Admin</a>
-          <p class="text-sm text-slate-500">Metricas agregadas e operacao da plataforma</p>
-          {% else %}
-          <a href="/" class="text-2xl font-black tracking-tight text-teal-700">Financa</a>
-          <p class="text-sm text-slate-500">Controle financeiro com processamento no backend</p>
-          {% endif %}
-        </div>
-        <nav class="flex flex-wrap gap-2 text-sm font-semibold">
-          {% if user_role == "admin" %}
-          <a href="/admin" class="rounded-full px-4 py-2 {% if current_path.startswith('/admin') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard Admin</a>
-          {% else %}
-          <a href="/" class="rounded-full px-4 py-2 {% if current_path == '/' %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Dashboard</a>
-          <a href="/entries" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Lancamentos</a>
-          <a href="/uploads" class="rounded-full px-4 py-2 {% if current_path.startswith('/uploads') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Uploads</a>
-          <a href="/entries/plans" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries/plans') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Financiamentos</a>
-          <a href="/entries/recurring" class="rounded-full px-4 py-2 {% if current_path.startswith('/entries/recurring') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Recorrentes</a>
-          <a href="/categories" class="rounded-full px-4 py-2 {% if current_path.startswith('/categories') %}bg-teal-600 text-white{% else %}bg-slate-100 text-slate-700{% endif %}">Categorias</a>
-          <a href="/entries/deductions/new" class="rounded-full bg-slate-100 px-4 py-2 text-slate-700">Descontos</a>
-          <a href="/entries/new" class="rounded-full bg-amber-400 px-4 py-2 text-slate-900">Novo lancamento</a>
-          {% endif %}
-          <a href="/logout" class="rounded-full bg-slate-900 px-4 py-2 text-white">Sair</a>
-        </nav>
-      </div>
-    </header>
-    {% endif %}
+  {% set p = request.url.path %}
+  {% set role = request.session.get("user_role") %}
+  {% if request.session.get("user_id") %}
+  <header class="sticky top-0 z-10 border-b border-slate-100 bg-white/90 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+      {% if role == "admin" %}
+      <a href="/admin" class="text-lg font-black tracking-tight text-teal-700">Financa <span class="text-xs font-semibold text-slate-400">Admin</span></a>
+      {% else %}
+      <a href="/" class="text-lg font-black tracking-tight text-teal-700">Financa</a>
+      {% endif %}
 
-    <main class="mx-auto max-w-7xl px-4 py-6">
-      {% block content %}{% endblock %}
-    </main>
-  </div>
+      <nav class="flex items-center gap-1 text-sm font-medium">
+        {% if role == "admin" %}
+        <a href="/admin" class="rounded-lg px-3 py-1.5 {% if p.startswith('/admin') %}bg-teal-50 text-teal-700{% else %}text-slate-600 hover:bg-slate-50{% endif %}">Dashboard</a>
+        {% else %}
+        <a href="/"              class="rounded-lg px-3 py-1.5 {% if p == '/' %}bg-teal-50 text-teal-700{% else %}text-slate-600 hover:bg-slate-50{% endif %}">Inicio</a>
+        <a href="/entries"       class="rounded-lg px-3 py-1.5 {% if p.startswith('/entries') and not p.startswith('/entries/plans') and not p.startswith('/entries/recurring') %}bg-teal-50 text-teal-700{% else %}text-slate-600 hover:bg-slate-50{% endif %}">Lancamentos</a>
+        <a href="/entries/plans" class="rounded-lg px-3 py-1.5 {% if p.startswith('/entries/plans') %}bg-teal-50 text-teal-700{% else %}text-slate-600 hover:bg-slate-50{% endif %}">Contratos</a>
+        <a href="/uploads"       class="rounded-lg px-3 py-1.5 {% if p.startswith('/uploads') %}bg-teal-50 text-teal-700{% else %}text-slate-600 hover:bg-slate-50{% endif %}">Uploads</a>
+        <details class="relative" id="more-menu">
+          <summary class="list-none cursor-pointer rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-50 select-none">Mais ▾</summary>
+          <div class="absolute right-0 top-9 z-20 w-48 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">
+            <a href="/entries/recurring" class="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Recorrentes</a>
+            <a href="/categories"        class="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Categorias</a>
+            <a href="/entries/deductions/new" class="block rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Novo desconto</a>
+          </div>
+        </details>
+        {% endif %}
+        <a href="/logout" class="ml-2 rounded-lg bg-slate-900 px-3 py-1.5 text-white">Sair</a>
+      </nav>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="mx-auto max-w-7xl px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    // Close "Mais" dropdown when clicking outside
+    document.addEventListener("click", function(e) {
+      const menu = document.getElementById("more-menu");
+      if (menu && !menu.contains(e.target)) menu.removeAttribute("open");
+    });
+  </script>
 </body>
 </html>
