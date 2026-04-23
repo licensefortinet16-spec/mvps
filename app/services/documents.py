@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import json
+import logging
 import re
 import subprocess
 import tempfile
@@ -406,6 +409,90 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
     return items[:10]
 
 
+_GROQ_VISION_PROMPT = """\
+Analise este comprovante fiscal brasileiro e retorne SOMENTE um JSON válido, sem markdown, sem explicações.
+Formato exato:
+{
+  "merchant": "nome do estabelecimento",
+  "date": "YYYY-MM-DD ou null",
+  "items": [{"label": "nome do produto", "amount": 0.00}],
+  "total": 0.00
+}
+Regras:
+- Para itens vendidos por peso (KG/g), use o valor total pago (quantidade × preço unitário), não o preço por kg.
+- Ignore linhas de impostos aproximados (Vir Aprox. Impostos).
+- "total" é o valor total da nota. Se não encontrar, some os itens.
+- Valores em formato brasileiro: vírgula como decimal (ex: 31,72 → 31.72 no JSON).
+- Se não encontrar um campo, use null.
+"""
+
+
+def _extract_receipt_with_groq(image_path: Path, filename: str) -> tuple[dict, float] | None:
+    """Use Llama Vision via Groq to extract receipt data from an image.
+
+    Returns None if GROQ_API_KEY is not set or if the call fails, so the
+    caller can fall back to the Tesseract-based pipeline.
+    """
+    from app.config import get_settings
+    api_key = get_settings().groq_api_key
+    if not api_key:
+        return None
+
+    suffix = image_path.suffix.lower()
+    media_type_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    media_type = media_type_map.get(suffix, "image/jpeg")
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=api_key)
+        image_data = base64.standard_b64encode(image_path.read_bytes()).decode()
+
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_data}"}},
+                    {"type": "text", "text": _GROQ_VISION_PROMPT},
+                ],
+            }],
+            max_tokens=1024,
+            temperature=0.1,
+        )
+
+        raw = response.choices[0].message.content or ""
+        # Strip markdown code fences if model wrapped the JSON
+        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw.strip())
+        data = json.loads(raw)
+
+        items = [
+            {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
+            for it in (data.get("items") or [])
+            if it.get("label") and it.get("amount") is not None
+        ]
+        total = data.get("total")
+        if total is None and items:
+            total = round(sum(i["amount"] for i in items), 2)
+
+        raw_date = data.get("date")
+        occurred_on = _parse_any_date(raw_date)
+
+        summary = {
+            "merchant": (data.get("merchant") or filename)[:160],
+            "detected_total": float(total) if total is not None else None,
+            "occurred_on": occurred_on.isoformat() if occurred_on else None,
+            "document_kind": "receipt",
+            "extracted_by": "groq-llama-vision",
+        }
+        confidence = 0.92 if total is not None else 0.65
+        return {"summary": summary, "items": items}, confidence
+
+    except Exception as exc:
+        logging.warning("Groq vision extraction failed, falling back to Tesseract: %s", exc)
+        return None
+
+
 def extract_receipt_data(text: str, filename: str, document_type: DocumentType) -> tuple[dict, float]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     total = extract_receipt_total(lines)
@@ -736,7 +823,17 @@ def process_document(db: Session, document_id: int) -> None:
                     extracted_data["items"].append({"title": title, "installment": f"{current}/{total}", "amount": amount})
 
             if not extracted_data["items"]:
-                extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
+                # Try Groq Llama Vision first (image files only); fall back to Tesseract text
+                stored_path = Path(document.stored_path)
+                groq_result = None
+                if stored_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                    groq_result = _extract_receipt_with_groq(stored_path, document.filename)
+
+                if groq_result is not None:
+                    extracted_data, confidence = groq_result
+                else:
+                    extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
+
                 summary = extracted_data.get("summary") or {}
                 total_amount = summary.get("detected_total")
                 merchant = summary.get("merchant") or f"Importacao {document.filename}"
