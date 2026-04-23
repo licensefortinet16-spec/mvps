@@ -457,6 +457,52 @@ Regras gerais:
 _GROQ_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 _GROQ_MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
+# Keywords for text-based document type detection (used for PDFs/TXT where vision is unavailable)
+_PAYSLIP_KEYWORDS = [
+    "contracheque", "holerite", "folha de pagamento", "folha salarial",
+    "salario base", "salario bruto", "liquido a receber", "total de vencimentos",
+    "total de descontos", "inss", "irrf", "rubrica", "competencia",
+]
+_RECEIPT_KEYWORDS = [
+    "nota fiscal", "nfc-e", "nf-e", "cupom fiscal", "documento auxiliar",
+    "cnpj do emitente", "valor total r$", "forma de pagamento", "troco",
+]
+_CREDIT_CARD_KEYWORDS = [
+    "fatura", "cartao de credito", "vencimento da fatura", "limite disponivel",
+    "pagamento minimo", "valor minimo", "limite de credito",
+]
+
+
+def _detect_type_from_text(filename: str, text: str) -> DocumentType | None:
+    """Infer document type from filename and extracted text (fallback for PDFs/TXT).
+
+    Returns None if classification is uncertain (caller keeps original type).
+    """
+    name_lower = normalize_text(filename)
+    text_lower = normalize_text(text[:2000])  # first 2000 chars are enough
+
+    # Filename is a strong signal
+    if any(kw in name_lower for kw in ["contracheque", "holerite", "folha", "payslip", "payroll"]):
+        return DocumentType.PAYSLIP
+    if any(kw in name_lower for kw in ["fatura", "cartao", "credit"]):
+        return DocumentType.CREDIT_CARD
+    if any(kw in name_lower for kw in ["nota", "nfce", "cupom", "recibo", "receipt"]):
+        return DocumentType.RECEIPT
+
+    # Count keyword hits in text
+    payslip_hits = sum(1 for kw in _PAYSLIP_KEYWORDS if kw in text_lower)
+    receipt_hits = sum(1 for kw in _RECEIPT_KEYWORDS if kw in text_lower)
+    credit_hits = sum(1 for kw in _CREDIT_CARD_KEYWORDS if kw in text_lower)
+
+    best = max(payslip_hits, receipt_hits, credit_hits)
+    if best < 2:  # not confident enough
+        return None
+    if payslip_hits == best:
+        return DocumentType.PAYSLIP
+    if credit_hits == best:
+        return DocumentType.CREDIT_CARD
+    return DocumentType.RECEIPT
+
 
 def _analyze_image_with_groq(image_path: Path, filename: str) -> tuple[DocumentType, dict, float] | None:
     """Use Llama Vision via Groq to detect document type AND extract data in one call.
@@ -883,64 +929,75 @@ def process_document(db: Session, document_id: int) -> None:
                     ))
 
         # ── Tesseract fallback (PDFs, or when Groq is not configured/failed) ───
-        elif document.document_type == DocumentType.PAYSLIP:
-            extracted_data, confidence = extract_payslip_data(text, document.filename)
-            sync_payslip_outputs(db, document, extracted_data)
-
         else:
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            for line in lines:
-                match = INSTALLMENT_PATTERN.search(line)
-                if match:
-                    total = int(match.group("total"))
-                    current = int(match.group("current"))
-                    amount = parse_brazilian_amount(match.group("amount"))
-                    title = match.group("label").strip()[:160]
-                    if current == 1:
-                        plan = InstallmentPlan(
+            # Auto-detect type from filename + extracted text to correct wrong
+            # user selections (e.g. payslip PDF uploaded as "credit_card").
+            detected = _detect_type_from_text(document.filename, text)
+            if detected is not None and detected != document.document_type:
+                logging.info(
+                    "document %s: user selected %s but text analysis detected %s — overriding",
+                    document_id, document.document_type, detected,
+                )
+                document.document_type = detected
+
+            if document.document_type == DocumentType.PAYSLIP:
+                extracted_data, confidence = extract_payslip_data(text, document.filename)
+                sync_payslip_outputs(db, document, extracted_data)
+
+            else:
+                lines = [line.strip() for line in text.splitlines() if line.strip()]
+                for line in lines:
+                    match = INSTALLMENT_PATTERN.search(line)
+                    if match:
+                        total = int(match.group("total"))
+                        current = int(match.group("current"))
+                        amount = parse_brazilian_amount(match.group("amount"))
+                        title = match.group("label").strip()[:160]
+                        if current == 1:
+                            plan = InstallmentPlan(
+                                tenant_id=document.tenant_id,
+                                user_id=document.user_id,
+                                title=title or "Compra parcelada",
+                                merchant=title or "Compra parcelada",
+                                plan_type=PlanType.INSTALLMENT,
+                                category=categorize_merchant(title),
+                                total_amount=round(amount * total, 2),
+                                installment_count=total,
+                                start_date=datetime.utcnow().date(),
+                                source="upload",
+                            )
+                            db.add(plan)
+                            db.flush()
+                            for index in range(total):
+                                db.add(
+                                    Installment(
+                                        tenant_id=document.tenant_id,
+                                        plan_id=plan.id,
+                                        sequence=index + 1,
+                                        due_date=(datetime.utcnow().date() + timedelta(days=30 * index)),
+                                        amount=amount,
+                                    )
+                                )
+                        extracted_data["items"].append({"title": title, "installment": f"{current}/{total}", "amount": amount})
+
+                if not extracted_data["items"]:
+                    extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
+                    summary = extracted_data.get("summary") or {}
+                    total_amount = summary.get("detected_total")
+                    merchant = summary.get("merchant") or f"Importacao {document.filename}"
+                    occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
+                    if total_amount:
+                        db.add(FinancialEntry(
                             tenant_id=document.tenant_id,
                             user_id=document.user_id,
-                            title=title or "Compra parcelada",
-                            merchant=title or "Compra parcelada",
-                            plan_type=PlanType.INSTALLMENT,
-                            category=categorize_merchant(title),
-                            total_amount=round(amount * total, 2),
-                            installment_count=total,
-                            start_date=datetime.utcnow().date(),
+                            title=merchant[:160],
+                            category="Cartao" if document.document_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
+                            entry_type=EntryType.EXPENSE,
+                            amount=round(total_amount, 2),
+                            occurred_on=occurred_on,
                             source="upload",
-                        )
-                        db.add(plan)
-                        db.flush()
-                        for index in range(total):
-                            db.add(
-                                Installment(
-                                    tenant_id=document.tenant_id,
-                                    plan_id=plan.id,
-                                    sequence=index + 1,
-                                    due_date=(datetime.utcnow().date() + timedelta(days=30 * index)),
-                                    amount=amount,
-                                )
-                            )
-                    extracted_data["items"].append({"title": title, "installment": f"{current}/{total}", "amount": amount})
-
-            if not extracted_data["items"]:
-                extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
-                summary = extracted_data.get("summary") or {}
-                total_amount = summary.get("detected_total")
-                merchant = summary.get("merchant") or f"Importacao {document.filename}"
-                occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
-                if total_amount:
-                    db.add(FinancialEntry(
-                        tenant_id=document.tenant_id,
-                        user_id=document.user_id,
-                        title=merchant[:160],
-                        category="Cartao" if document.document_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
-                        entry_type=EntryType.EXPENSE,
-                        amount=round(total_amount, 2),
-                        occurred_on=occurred_on,
-                        source="upload",
-                        notes="Lancamento resumido gerado por extracao automatica",
-                    ))
+                            notes="Lancamento resumido gerado por extracao automatica",
+                        ))
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]
