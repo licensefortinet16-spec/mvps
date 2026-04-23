@@ -15,19 +15,19 @@
 
 <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
   <article class="rounded-3xl bg-white p-6 shadow-lg">
-    <p class="text-sm text-slate-500">Receitas</p>
+    <p class="text-sm text-slate-500">Receitas (total)</p>
     <p class="mt-2 text-3xl font-black text-emerald-600">R$ {{ "%.2f"|format(snapshot.total_income) }}</p>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
-    <p class="text-sm text-slate-500">Despesas</p>
+    <p class="text-sm text-slate-500">Despesas (total)</p>
     <p class="mt-2 text-3xl font-black text-rose-600">R$ {{ "%.2f"|format(snapshot.total_expense) }}</p>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
-    <p class="text-sm text-slate-500">Saldo</p>
-    <p class="mt-2 text-3xl font-black text-slate-900">R$ {{ "%.2f"|format(snapshot.net) }}</p>
+    <p class="text-sm text-slate-500">Saldo acumulado</p>
+    <p class="mt-2 text-3xl font-black {% if snapshot.net >= 0 %}text-slate-900{% else %}text-rose-600{% endif %}">R$ {{ "%.2f"|format(snapshot.net) }}</p>
   </article>
   <article class="rounded-3xl bg-slate-900 p-6 shadow-lg">
-    <p class="text-sm text-slate-300">Parcelas de financiamentos</p>
+    <p class="text-sm text-slate-300">Parcelas futuras</p>
     <p class="mt-2 text-3xl font-black text-white">{{ snapshot.upcoming_installment_count }}</p>
   </article>
   <article class="rounded-3xl bg-white p-6 shadow-lg">
@@ -42,6 +42,35 @@
     <p class="text-sm text-slate-500">Descontos</p>
     <p class="mt-2 text-3xl font-black text-amber-600">R$ {{ "%.2f"|format(snapshot.deduction_total) }}</p>
   </article>
+</section>
+
+{% set cmp = snapshot.comparison %}
+<section class="mt-4 rounded-3xl bg-white p-6 shadow-lg">
+  <p class="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Comparativo mensal</p>
+  <div class="mt-4 grid gap-4 md:grid-cols-2">
+    <article class="rounded-3xl bg-emerald-50 p-5">
+      <p class="text-sm text-emerald-700">Receita em {{ cmp.current_month }}</p>
+      <p class="mt-2 text-2xl font-black text-emerald-700">R$ {{ "%.2f"|format(cmp.current_income) }}</p>
+      <p class="mt-1 text-sm text-slate-500">{{ cmp.previous_month }}: R$ {{ "%.2f"|format(cmp.previous_income) }}
+        {% if cmp.income_change_pct is not none %}
+        <span class="font-semibold {% if cmp.income_change_pct >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+          ({{ '+' if cmp.income_change_pct >= 0 else '' }}{{ cmp.income_change_pct }}%)
+        </span>
+        {% endif %}
+      </p>
+    </article>
+    <article class="rounded-3xl bg-rose-50 p-5">
+      <p class="text-sm text-rose-700">Despesa em {{ cmp.current_month }}</p>
+      <p class="mt-2 text-2xl font-black text-rose-700">R$ {{ "%.2f"|format(cmp.current_expense) }}</p>
+      <p class="mt-1 text-sm text-slate-500">{{ cmp.previous_month }}: R$ {{ "%.2f"|format(cmp.previous_expense) }}
+        {% if cmp.expense_change_pct is not none %}
+        <span class="font-semibold {% if cmp.expense_change_pct <= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+          ({{ '+' if cmp.expense_change_pct >= 0 else '' }}{{ cmp.expense_change_pct }}%)
+        </span>
+        {% endif %}
+      </p>
+    </article>
+  </div>
 </section>
 
 <section class="mt-6 rounded-3xl bg-white p-6 shadow-lg">

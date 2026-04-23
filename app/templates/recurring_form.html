@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
+  <h1 class="text-3xl font-black text-slate-900">{% if mode == 'edit' %}Editar recorrente{% else %}Nova despesa recorrente{% endif %}</h1>
+  {% set action = "/entries/recurring/" ~ recurring.id ~ "/edit" if mode == 'edit' else "/entries/recurring/new" %}
+  <form method="post" action="{{ action }}" class="mt-6 grid gap-4 md:grid-cols-2">
+    <input
+      name="title"
+      placeholder="Titulo"
+      value="{{ recurring.title if recurring else '' }}"
+      class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2"
+      required
+    />
+    <div class="flex flex-col gap-1">
+      <input
+        name="category"
+        list="category-list"
+        placeholder="Categoria"
+        value="{{ recurring.category if recurring else '' }}"
+        class="rounded-2xl border border-slate-200 px-4 py-3"
+        required
+      />
+      <datalist id="category-list">
+        {% for cat in categories %}
+        <option value="{{ cat }}">
+        {% endfor %}
+      </datalist>
+    </div>
+    <select name="entry_type" class="rounded-2xl border border-slate-200 px-4 py-3" required>
+      <option value="expense" {% if not recurring or recurring.entry_type.value == 'expense' %}selected{% endif %}>Despesa</option>
+      <option value="income" {% if recurring and recurring.entry_type.value == 'income' %}selected{% endif %}>Receita</option>
+    </select>
+    <input
+      name="amount"
+      type="number"
+      step="0.01"
+      min="0"
+      placeholder="Valor"
+      value="{{ '%.2f'|format(recurring.amount) if recurring else '' }}"
+      class="rounded-2xl border border-slate-200 px-4 py-3"
+      required
+    />
+    <select name="frequency" class="rounded-2xl border border-slate-200 px-4 py-3" required>
+      <option value="monthly" {% if not recurring or recurring.frequency.value == 'monthly' %}selected{% endif %}>Mensal</option>
+      <option value="weekly" {% if recurring and recurring.frequency.value == 'weekly' %}selected{% endif %}>Semanal</option>
+      <option value="biweekly" {% if recurring and recurring.frequency.value == 'biweekly' %}selected{% endif %}>Quinzenal</option>
+      <option value="yearly" {% if recurring and recurring.frequency.value == 'yearly' %}selected{% endif %}>Anual</option>
+    </select>
+    <div>
+      <label class="mb-1 block text-sm text-slate-500">Data de inicio</label>
+      <input
+        name="start_date"
+        type="date"
+        value="{{ recurring.start_date.isoformat() if recurring else '' }}"
+        class="w-full rounded-2xl border border-slate-200 px-4 py-3"
+        required
+      />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm text-slate-500">Data de encerramento (opcional)</label>
+      <input
+        name="end_date"
+        type="date"
+        value="{{ recurring.end_date.isoformat() if recurring and recurring.end_date else '' }}"
+        class="w-full rounded-2xl border border-slate-200 px-4 py-3"
+      />
+    </div>
+    <textarea name="notes" placeholder="Observacoes" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2">{{ recurring.notes or '' if recurring else '' }}</textarea>
+    {% if mode == 'edit' %}
+    <label class="flex items-center gap-3 md:col-span-2">
+      <input type="checkbox" name="is_active" {% if recurring and recurring.is_active %}checked{% endif %} class="h-5 w-5 rounded" />
+      <span class="text-sm font-semibold text-slate-700">Ativo (gera lancamentos automaticamente)</span>
+    </label>
+    {% endif %}
+    <div class="flex gap-3 md:col-span-2">
+      <button class="flex-1 rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white">{% if mode == 'edit' %}Salvar alteracoes{% else %}Criar recorrente{% endif %}</button>
+      <a href="/entries/recurring" class="rounded-2xl bg-slate-100 px-4 py-3 text-center font-semibold text-slate-700">Cancelar</a>
+    </div>
+  </form>
+  <p class="mt-4 text-sm text-slate-500">Os lancamentos sao gerados automaticamente ao abrir o dashboard.</p>
+</div>
+{% endblock %}

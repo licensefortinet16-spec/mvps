@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, PlanType
+from app.models import Document, EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, PlanType, Tenant, User, UserRole
 
 
 def _month_key(value: date) -> str:
@@ -130,6 +130,29 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
 
     forecast = build_forecast(monthly_chart, upcoming_installments)
 
+    today = date.today()
+    current_month_key = f"{today.year}-{today.month:02d}"
+    prev = (today.replace(day=1) - timedelta(days=1))
+    prev_month_key = f"{prev.year}-{prev.month:02d}"
+    cur = monthly.get(current_month_key, {"income": Decimal("0"), "expense": Decimal("0")})
+    prv = monthly.get(prev_month_key, {"income": Decimal("0"), "expense": Decimal("0")})
+
+    def _pct(current_val: Decimal, prev_val: Decimal) -> float | None:
+        if prev_val == 0:
+            return None
+        return round(float((current_val - prev_val) / prev_val * 100), 1)
+
+    comparison = {
+        "current_month": current_month_key,
+        "previous_month": prev_month_key,
+        "current_income": float(cur["income"]),
+        "current_expense": float(cur["expense"]),
+        "previous_income": float(prv["income"]),
+        "previous_expense": float(prv["expense"]),
+        "income_change_pct": _pct(cur["income"], prv["income"]),
+        "expense_change_pct": _pct(cur["expense"], prv["expense"]),
+    }
+
     return {
         "total_income": float(totals["income"]),
         "total_expense": float(totals["expense"]),
@@ -148,6 +171,7 @@ def build_dashboard_snapshot(db: Session, tenant_id: int) -> dict:
         "recent_deductions": recent_deductions,
         "upcoming_installments": upcoming_installments,
         "forecast": forecast,
+        "comparison": comparison,
     }
 
 
@@ -185,6 +209,8 @@ def build_forecast(monthly_chart: list[dict], upcoming_installments: list[dict])
 
 
 def admin_usage_snapshot(db: Session) -> dict:
-    users = db.scalar(select(func.count()).select_from(FinancialEntry))
-    docs = db.scalar(select(func.count()).select_from(Installment))
-    return {"entries": users or 0, "installments": docs or 0}
+    users = db.scalar(select(func.count()).select_from(User).where(User.role == UserRole.USER))
+    tenants = db.scalar(select(func.count()).select_from(Tenant))
+    docs = db.scalar(select(func.count()).select_from(Document))
+    entries = db.scalar(select(func.count()).select_from(FinancialEntry))
+    return {"users": users or 0, "tenants": tenants or 0, "documents": docs or 0, "entries": entries or 0}

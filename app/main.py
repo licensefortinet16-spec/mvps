@@ -10,7 +10,7 @@ from app.auth import hash_password
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine
 from app.models import Tenant, User, UserRole
-from app.routes import admin, auth, dashboard, entries, uploads
+from app.routes import admin, auth, categories, dashboard, entries, uploads
 
 
 settings = get_settings()
@@ -99,3 +99,4 @@ app.include_router(dashboard.router)
 app.include_router(entries.router)
 app.include_router(uploads.router)
 app.include_router(admin.router)
+app.include_router(categories.router)

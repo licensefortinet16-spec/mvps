@@ -8,6 +8,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
+DEFAULT_CATEGORIES_EXPENSE = [
+    "Alimentacao", "Mercado", "Transporte", "Moradia", "Saude",
+    "Lazer", "Educacao", "Assinaturas", "Impostos", "Cartao",
+    "Parcelamentos", "Outros",
+]
+DEFAULT_CATEGORIES_INCOME = [
+    "Salario", "Freelance", "Rendimentos", "Bonus", "Outros",
+]
+
 
 class UserRole(str, enum.Enum):
     USER = "user"
@@ -45,6 +54,13 @@ class PlanType(str, enum.Enum):
 class DeductionSource(str, enum.Enum):
     UPLOAD = "upload"
     MANUAL = "manual"
+
+
+class RecurringFrequency(str, enum.Enum):
+    WEEKLY = "weekly"
+    BIWEEKLY = "biweekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
 
 
 class Tenant(Base):
@@ -157,6 +173,47 @@ class AuditEvent(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class UserCategory(Base):
+    __tablename__ = "user_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    entry_type: Mapped[str] = mapped_column(String(20), nullable=False, default="both")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RecurringExpense(Base):
+    __tablename__ = "recurring_expenses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    entry_type: Mapped[EntryType] = mapped_column(Enum(EntryType), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    frequency: Mapped[RecurringFrequency] = mapped_column(Enum(RecurringFrequency), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_generated: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

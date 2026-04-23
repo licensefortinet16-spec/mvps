@@ -6,7 +6,10 @@
       <h1 class="text-3xl font-black text-slate-900">Lancamentos</h1>
       <p class="text-sm text-slate-500">Todos os registros do tenant autenticado</p>
     </div>
-    <a href="/entries/new" class="rounded-2xl bg-teal-600 px-4 py-3 text-center font-bold text-white">Novo lancamento</a>
+    <div class="flex flex-wrap gap-2">
+      <a href="/entries/recurring" class="rounded-2xl bg-slate-100 px-4 py-3 text-center font-semibold text-slate-700">Recorrentes</a>
+      <a href="/entries/new" class="rounded-2xl bg-teal-600 px-4 py-3 text-center font-bold text-white">Novo lancamento</a>
+    </div>
   </div>
   <div class="mt-6 overflow-x-auto">
     <table class="min-w-full text-sm">
@@ -26,14 +29,21 @@
         <tr class="border-t border-slate-100">
           <td class="py-3 font-semibold">{{ entry.title }}</td>
           <td class="py-3">{{ entry.category }}</td>
-          <td class="py-3">{{ entry.entry_type.value }}</td>
+          <td class="py-3">{{ 'Receita' if entry.entry_type.value == 'income' else 'Despesa' }}</td>
           <td class="py-3">{{ entry.occurred_on }}</td>
-          <td class="py-3 font-bold">R$ {{ "%.2f"|format(entry.amount) }}</td>
-          <td class="py-3">{{ entry.source }}</td>
+          <td class="py-3 font-bold {% if entry.entry_type.value == 'income' %}text-emerald-600{% else %}text-rose-600{% endif %}">
+            {% if entry.entry_type.value == 'income' %}+{% else %}-{% endif %}R$ {{ "%.2f"|format(entry.amount) }}
+          </td>
+          <td class="py-3">
+            <span class="rounded-full px-2 py-1 text-xs {% if entry.source == 'manual' %}bg-slate-100 text-slate-600{% elif entry.source == 'upload' %}bg-teal-50 text-teal-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ entry.source }}</span>
+          </td>
           <td class="py-3 text-right">
-            <form method="post" action="/entries/{{ entry.id }}/delete" onsubmit="return confirm('Excluir este lancamento?');">
-              <button class="rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">Excluir</button>
-            </form>
+            <div class="flex justify-end gap-2">
+              <a href="/entries/{{ entry.id }}/edit" class="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">Editar</a>
+              <form method="post" action="/entries/{{ entry.id }}/delete" onsubmit="return confirm('Excluir este lancamento?');">
+                <button class="rounded-full bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700">Excluir</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% else %}

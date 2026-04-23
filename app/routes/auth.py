@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import secrets
+import smtplib
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+
 from slugify import slugify
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, Form, Request
@@ -10,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth import hash_password, verify_password
 from app.config import get_settings
 from app.db import get_db
-from app.models import Tenant, User, UserRole
+from app.models import PasswordResetToken, Tenant, User, UserRole
 from app.services.audit import log_event
 
 
@@ -135,6 +140,97 @@ def register(
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/", status_code=303)
+
+
+def _send_reset_email(to_email: str, reset_url: str) -> None:
+    msg = MIMEText(
+        f"Voce solicitou a recuperacao de senha.\n\nClique no link abaixo para redefinir sua senha (valido por 1 hora):\n\n{reset_url}\n\nSe nao foi voce, ignore este e-mail.",
+        "plain",
+        "utf-8",
+    )
+    msg["Subject"] = "Recuperacao de senha — Financa"
+    msg["From"] = settings.smtp_from or settings.smtp_user
+    msg["To"] = to_email
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+        server.starttls()
+        server.login(settings.smtp_user, settings.smtp_password)
+        server.sendmail(msg["From"], [to_email], msg.as_string())
+
+
+@router.get("/forgot-password")
+def forgot_password_page(request: Request):
+    user_id = request.session.get("user_id")
+    if user_id:
+        return RedirectResponse("/", status_code=303)
+    return request.app.state.templates.TemplateResponse("forgot_password.html", {"request": request})
+
+
+@router.post("/forgot-password")
+def forgot_password(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.email == email.lower().strip()))
+    reset_url: str | None = None
+    email_sent = False
+    dev_link: str | None = None
+
+    if user and user.password_hash:
+        token_value = secrets.token_hex(32)
+        expires = datetime.utcnow() + timedelta(hours=1)
+        db.add(PasswordResetToken(user_id=user.id, token=token_value, expires_at=expires))
+        db.commit()
+        reset_url = f"{settings.app_base_url}/reset-password?token={token_value}"
+        if settings.smtp_host and settings.smtp_user:
+            try:
+                _send_reset_email(user.email, reset_url)
+                email_sent = True
+            except Exception:
+                pass
+        if not email_sent:
+            dev_link = reset_url
+
+    return request.app.state.templates.TemplateResponse(
+        "forgot_password.html",
+        {"request": request, "submitted": True, "email_sent": email_sent, "dev_link": dev_link},
+    )
+
+
+@router.get("/reset-password")
+def reset_password_page(request: Request, token: str = "", db: Session = Depends(get_db)):
+    reset_token = db.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.token == token, PasswordResetToken.used == False)  # noqa: E712
+    )
+    valid = reset_token is not None and reset_token.expires_at > datetime.utcnow()
+    return request.app.state.templates.TemplateResponse(
+        "reset_password.html",
+        {"request": request, "token": token, "valid": valid},
+    )
+
+
+@router.post("/reset-password")
+def reset_password(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    reset_token = db.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.token == token, PasswordResetToken.used == False)  # noqa: E712
+    )
+    if not reset_token or reset_token.expires_at <= datetime.utcnow():
+        return request.app.state.templates.TemplateResponse(
+            "reset_password.html",
+            {"request": request, "token": token, "valid": False, "error": "Link expirado ou invalido."},
+        )
+    user = db.get(User, reset_token.user_id)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    user.password_hash = hash_password(password)
+    reset_token.used = True
+    db.commit()
+    log_event(db, "auth.password_reset", user=user)
+    return request.app.state.templates.TemplateResponse(
+        "reset_password.html",
+        {"request": request, "token": token, "valid": True, "success": True},
+    )
 
 
 @router.get("/login/google")

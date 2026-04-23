@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl">
+  <div class="rounded-3xl bg-white p-6 shadow-xl">
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-3xl font-black text-slate-900">Categorias</h1>
+        <p class="text-sm text-slate-500">Categorias personalizadas para seus lancamentos</p>
+      </div>
+    </div>
+
+    <form method="post" action="/categories/new" class="mt-6 flex gap-3">
+      <input name="name" placeholder="Nome da categoria" class="flex-1 rounded-2xl border border-slate-200 px-4 py-3" required maxlength="80" />
+      <select name="entry_type" class="rounded-2xl border border-slate-200 px-4 py-3">
+        <option value="both">Ambos</option>
+        <option value="expense">Despesa</option>
+        <option value="income">Receita</option>
+      </select>
+      <button class="rounded-2xl bg-teal-600 px-5 py-3 font-bold text-white">Adicionar</button>
+    </form>
+
+    <section class="mt-6">
+      <h2 class="text-lg font-black text-slate-900">Suas categorias</h2>
+      {% if categories %}
+      <div class="mt-3 space-y-2">
+        {% for cat in categories %}
+        <div class="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3">
+          <div>
+            <span class="font-semibold text-slate-900">{{ cat.name }}</span>
+            <span class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{{ cat.entry_type }}</span>
+          </div>
+          <form method="post" action="/categories/{{ cat.id }}/delete" onsubmit="return confirm('Excluir categoria?');">
+            <button class="rounded-full bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700">Excluir</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="mt-3 text-sm text-slate-500">Nenhuma categoria personalizada ainda.</p>
+      {% endif %}
+    </section>
+
+    <section class="mt-6 rounded-3xl bg-slate-50 p-5">
+      <h2 class="text-base font-black text-slate-700">Categorias padrao de despesa</h2>
+      <div class="mt-2 flex flex-wrap gap-2">
+        {% for name in defaults_expense %}
+        <span class="rounded-full bg-white px-3 py-1 text-sm text-slate-600 shadow-sm">{{ name }}</span>
+        {% endfor %}
+      </div>
+      <h2 class="mt-4 text-base font-black text-slate-700">Categorias padrao de receita</h2>
+      <div class="mt-2 flex flex-wrap gap-2">
+        {% for name in defaults_income %}
+        <span class="rounded-full bg-white px-3 py-1 text-sm text-slate-600 shadow-sm">{{ name }}</span>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

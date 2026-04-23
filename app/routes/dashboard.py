@@ -7,6 +7,7 @@ from app.db import get_db
 from app.deps import get_current_client
 from app.models import Document, DocumentType, FinancialEntry, InstallmentPlan, User
 from app.services.forecast import build_dashboard_snapshot
+from app.services.recurring import generate_recurring_entries
 
 
 router = APIRouter()
@@ -40,6 +41,7 @@ def customer_dashboard(request: Request, db: Session = Depends(get_db), user: Us
 
 
 def render_client_dashboard(request: Request, db: Session, user: User):
+    generate_recurring_entries(db, user.tenant_id)
     snapshot = build_dashboard_snapshot(db, user.tenant_id)
     recent_entries = (
         db.execute(

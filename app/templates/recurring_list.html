@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="rounded-3xl bg-white p-6 shadow-xl">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 class="text-3xl font-black text-slate-900">Lancamentos recorrentes</h1>
+      <p class="text-sm text-slate-500">Receitas e despesas geradas automaticamente por frequencia</p>
+    </div>
+    <a href="/entries/recurring/new" class="rounded-2xl bg-teal-600 px-4 py-3 text-center font-bold text-white">Novo recorrente</a>
+  </div>
+
+  <div class="mt-6 grid gap-4">
+    {% for r in recurrings %}
+    <article class="rounded-3xl border border-slate-100 p-5">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-black text-slate-900">{{ r.title }}</h3>
+            {% if not r.is_active %}
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">Inativo</span>
+            {% endif %}
+          </div>
+          <p class="text-sm text-slate-500">{{ r.category }} •
+            <span class="{% if r.entry_type.value == 'income' %}text-emerald-600{% else %}text-rose-600{% endif %} font-semibold">{{ 'Receita' if r.entry_type.value == 'income' else 'Despesa' }}</span>
+            • R$ {{ "%.2f"|format(r.amount) }}
+          </p>
+          <p class="mt-1 text-sm text-slate-500">
+            Frequencia:
+            {% if r.frequency.value == 'monthly' %}Mensal
+            {% elif r.frequency.value == 'weekly' %}Semanal
+            {% elif r.frequency.value == 'biweekly' %}Quinzenal
+            {% else %}Anual{% endif %}
+            • Inicio: {{ r.start_date }}
+            {% if r.end_date %} • Fim: {{ r.end_date }}{% endif %}
+            {% if r.last_generated %} • Ultimo: {{ r.last_generated }}{% endif %}
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/entries/recurring/{{ r.id }}/edit" class="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Editar</a>
+          <form method="post" action="/entries/recurring/{{ r.id }}/delete" onsubmit="return confirm('Excluir esta recorrencia?');">
+            <button class="rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">Excluir</button>
+          </form>
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <p class="text-sm text-slate-500">Nenhuma recorrencia cadastrada.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

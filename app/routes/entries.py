@@ -11,16 +11,31 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_client
-from app.models import DeductionSource, EntryType, FinancialEntry, Installment, InstallmentPlan, PayslipDeduction, PlanType, User
+from app.models import (
+    DeductionSource, EntryType, FinancialEntry, Installment, InstallmentPlan,
+    PayslipDeduction, PlanType, RecurringExpense, RecurringFrequency, User, UserCategory,
+)
 from app.services.audit import log_event
 
 
 router = APIRouter(prefix="/entries")
 
 
+def _get_categories(db: Session, tenant_id: int) -> list[str]:
+    from app.models import DEFAULT_CATEGORIES_EXPENSE, DEFAULT_CATEGORIES_INCOME
+    custom = db.execute(
+        select(UserCategory.name).where(UserCategory.tenant_id == tenant_id).order_by(UserCategory.name)
+    ).scalars().all()
+    all_cats = sorted(set(DEFAULT_CATEGORIES_EXPENSE + DEFAULT_CATEGORIES_INCOME + list(custom)))
+    return all_cats
+
+
 @router.get("/new")
-def new_entry(request: Request, user: User = Depends(get_current_client)):
-    return request.app.state.templates.TemplateResponse("entry_form.html", {"request": request})
+def new_entry(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    return request.app.state.templates.TemplateResponse(
+        "entry_form.html",
+        {"request": request, "entry": None, "mode": "create", "categories": _get_categories(db, user.tenant_id)},
+    )
 
 
 @router.post("/new")
@@ -49,7 +64,45 @@ def create_entry(
     db.add(entry)
     db.commit()
     log_event(db, "entries.create", user=user, metadata={"entry_type": entry_type, "amount": amount})
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/entries", status_code=303)
+
+
+@router.get("/{entry_id}/edit")
+def edit_entry_page(entry_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    entry = db.get(FinancialEntry, entry_id)
+    if not entry or entry.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries", status_code=303)
+    return request.app.state.templates.TemplateResponse(
+        "entry_form.html",
+        {"request": request, "entry": entry, "mode": "edit", "categories": _get_categories(db, user.tenant_id)},
+    )
+
+
+@router.post("/{entry_id}/edit")
+def update_entry(
+    entry_id: int,
+    request: Request,
+    title: str = Form(...),
+    category: str = Form(...),
+    entry_type: str = Form(...),
+    amount: float = Form(...),
+    occurred_on: date = Form(...),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_client),
+):
+    entry = db.get(FinancialEntry, entry_id)
+    if not entry or entry.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries", status_code=303)
+    entry.title = title
+    entry.category = category
+    entry.entry_type = EntryType(entry_type)
+    entry.amount = amount
+    entry.occurred_on = occurred_on
+    entry.notes = notes or None
+    db.commit()
+    log_event(db, "entries.update", user=user, metadata={"entry_id": entry_id})
+    return RedirectResponse("/entries", status_code=303)
 
 
 @router.post("/{entry_id}/delete")
@@ -289,6 +342,131 @@ def create_deduction(
     db.commit()
     log_event(db, "deductions.create", user=user, metadata={"label": label, "amount": amount})
     return RedirectResponse("/", status_code=303)
+
+
+@router.get("/recurring")
+def list_recurring(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    recurrings = (
+        db.execute(
+            select(RecurringExpense)
+            .where(RecurringExpense.tenant_id == user.tenant_id)
+            .order_by(RecurringExpense.is_active.desc(), RecurringExpense.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return request.app.state.templates.TemplateResponse(
+        "recurring_list.html",
+        {"request": request, "recurrings": recurrings},
+    )
+
+
+@router.get("/recurring/new")
+def new_recurring(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    return request.app.state.templates.TemplateResponse(
+        "recurring_form.html",
+        {"request": request, "recurring": None, "mode": "create", "categories": _get_categories(db, user.tenant_id)},
+    )
+
+
+@router.post("/recurring/new")
+def create_recurring(
+    request: Request,
+    title: str = Form(...),
+    category: str = Form(...),
+    entry_type: str = Form(...),
+    amount: float = Form(...),
+    frequency: str = Form(...),
+    start_date: date = Form(...),
+    end_date: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_client),
+):
+    parsed_end_date: date | None = None
+    if end_date.strip():
+        try:
+            from datetime import datetime as _dt
+            parsed_end_date = _dt.strptime(end_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    recurring = RecurringExpense(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        title=title,
+        category=category,
+        entry_type=EntryType(entry_type),
+        amount=amount,
+        frequency=RecurringFrequency(frequency),
+        start_date=start_date,
+        end_date=parsed_end_date,
+        notes=notes or None,
+    )
+    db.add(recurring)
+    db.commit()
+    log_event(db, "recurring.create", user=user, metadata={"title": title, "frequency": frequency})
+    return RedirectResponse("/entries/recurring", status_code=303)
+
+
+@router.get("/recurring/{recurring_id}/edit")
+def edit_recurring_page(recurring_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    recurring = db.get(RecurringExpense, recurring_id)
+    if not recurring or recurring.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries/recurring", status_code=303)
+    return request.app.state.templates.TemplateResponse(
+        "recurring_form.html",
+        {"request": request, "recurring": recurring, "mode": "edit", "categories": _get_categories(db, user.tenant_id)},
+    )
+
+
+@router.post("/recurring/{recurring_id}/edit")
+def update_recurring(
+    recurring_id: int,
+    request: Request,
+    title: str = Form(...),
+    category: str = Form(...),
+    entry_type: str = Form(...),
+    amount: float = Form(...),
+    frequency: str = Form(...),
+    start_date: date = Form(...),
+    end_date: str = Form(""),
+    notes: str = Form(""),
+    is_active: str = Form("on"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_client),
+):
+    recurring = db.get(RecurringExpense, recurring_id)
+    if not recurring or recurring.tenant_id != user.tenant_id:
+        return RedirectResponse("/entries/recurring", status_code=303)
+    parsed_end_date: date | None = None
+    if end_date.strip():
+        try:
+            from datetime import datetime as _dt
+            parsed_end_date = _dt.strptime(end_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    recurring.title = title
+    recurring.category = category
+    recurring.entry_type = EntryType(entry_type)
+    recurring.amount = amount
+    recurring.frequency = RecurringFrequency(frequency)
+    recurring.start_date = start_date
+    recurring.end_date = parsed_end_date
+    recurring.notes = notes or None
+    recurring.is_active = is_active == "on"
+    db.commit()
+    log_event(db, "recurring.update", user=user, metadata={"recurring_id": recurring_id})
+    return RedirectResponse("/entries/recurring", status_code=303)
+
+
+@router.post("/recurring/{recurring_id}/delete")
+def delete_recurring(recurring_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    recurring = db.get(RecurringExpense, recurring_id)
+    if recurring and recurring.tenant_id == user.tenant_id:
+        db.delete(recurring)
+        db.commit()
+        log_event(db, "recurring.delete", user=user, metadata={"recurring_id": recurring_id})
+    return RedirectResponse("/entries/recurring", status_code=303)
 
 
 @router.get("")

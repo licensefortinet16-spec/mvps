@@ -1,19 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mx-auto max-w-2xl rounded-3xl bg-white p-8 shadow-xl">
-  <h1 class="text-3xl font-black text-slate-900">Novo lancamento manual</h1>
-  <form method="post" action="/entries/new" class="mt-6 grid gap-4 md:grid-cols-2">
-    <input name="title" placeholder="Titulo" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" required />
-    <input name="category" placeholder="Categoria" class="rounded-2xl border border-slate-200 px-4 py-3" required />
+  <h1 class="text-3xl font-black text-slate-900">{% if mode == 'edit' %}Editar lancamento{% else %}Novo lancamento manual{% endif %}</h1>
+  {% set action = "/entries/" ~ entry.id ~ "/edit" if mode == 'edit' else "/entries/new" %}
+  <form method="post" action="{{ action }}" class="mt-6 grid gap-4 md:grid-cols-2">
+    <input
+      name="title"
+      placeholder="Titulo"
+      value="{{ entry.title if entry else '' }}"
+      class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2"
+      required
+    />
+    <div class="flex flex-col gap-1">
+      <input
+        name="category"
+        id="category"
+        list="category-list"
+        placeholder="Categoria"
+        value="{{ entry.category if entry else '' }}"
+        class="rounded-2xl border border-slate-200 px-4 py-3"
+        required
+      />
+      <datalist id="category-list">
+        {% for cat in categories %}
+        <option value="{{ cat }}">
+        {% endfor %}
+      </datalist>
+    </div>
     <select name="entry_type" class="rounded-2xl border border-slate-200 px-4 py-3" required>
-      <option value="income">Receita</option>
-      <option value="expense">Despesa</option>
+      <option value="income" {% if entry and entry.entry_type.value == 'income' %}selected{% endif %}>Receita</option>
+      <option value="expense" {% if not entry or entry.entry_type.value == 'expense' %}selected{% endif %}>Despesa</option>
     </select>
-    <input name="amount" type="number" step="0.01" min="0" placeholder="Valor" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <input name="occurred_on" type="date" class="rounded-2xl border border-slate-200 px-4 py-3" required />
-    <textarea name="notes" placeholder="Observacoes" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2"></textarea>
-    <button class="rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white md:col-span-2">Salvar lancamento</button>
+    <input
+      name="amount"
+      type="number"
+      step="0.01"
+      min="0"
+      placeholder="Valor"
+      value="{{ '%.2f'|format(entry.amount) if entry else '' }}"
+      class="rounded-2xl border border-slate-200 px-4 py-3"
+      required
+    />
+    <input
+      name="occurred_on"
+      type="date"
+      value="{{ entry.occurred_on.isoformat() if entry else '' }}"
+      class="rounded-2xl border border-slate-200 px-4 py-3"
+      required
+    />
+    <textarea name="notes" placeholder="Observacoes" class="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2">{{ entry.notes or '' if entry else '' }}</textarea>
+    <div class="flex gap-3 md:col-span-2">
+      <button class="flex-1 rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white">{% if mode == 'edit' %}Salvar alteracoes{% else %}Salvar lancamento{% endif %}</button>
+      <a href="/entries" class="rounded-2xl bg-slate-100 px-4 py-3 text-center font-semibold text-slate-700">Cancelar</a>
+    </div>
   </form>
+  {% if mode != 'edit' %}
+  <p class="mt-4 text-sm text-slate-500">Para adicionar categorias personalizadas, acesse <a href="/categories" class="font-semibold text-teal-700">Categorias</a>.</p>
+  {% endif %}
 </div>
 {% endblock %}
-
