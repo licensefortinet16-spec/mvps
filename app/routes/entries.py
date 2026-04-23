@@ -471,7 +471,8 @@ def delete_recurring(recurring_id: int, db: Session = Depends(get_db), user: Use
 
 @router.get("")
 def list_entries(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
-    entries = (
+    import re as _re
+    all_entries = (
         db.execute(
             select(FinancialEntry)
             .where(FinancialEntry.tenant_id == user.tenant_id)
@@ -480,7 +481,54 @@ def list_entries(request: Request, db: Session = Depends(get_db), user: User = D
         .scalars()
         .all()
     )
-    return request.app.state.templates.TemplateResponse("entries_list.html", {"request": request, "entries": entries})
+
+    # Separate upload-grouped entries (have "document_id=N" in notes) from standalone
+    _doc_id_re = _re.compile(r"document_id=(\d+)")
+    groups: dict[int, dict] = {}
+    standalone: list = []
+
+    for entry in all_entries:
+        m = _doc_id_re.search(entry.notes or "")
+        if entry.source == "upload" and m:
+            doc_id = int(m.group(1))
+            if doc_id not in groups:
+                # Extract merchant name from notes: "Importado de MERCHANT (document_id=N)"
+                merchant_match = _re.match(r"Importado de (.+?) \(document_id=", entry.notes or "")
+                merchant = merchant_match.group(1) if merchant_match else entry.title
+                groups[doc_id] = {
+                    "doc_id": doc_id,
+                    "merchant": merchant,
+                    "occurred_on": entry.occurred_on,
+                    "category": entry.category,
+                    "entry_type": entry.entry_type,
+                    "total": 0.0,
+                    "items": [],
+                }
+            groups[doc_id]["total"] = round(groups[doc_id]["total"] + float(entry.amount), 2)
+            groups[doc_id]["items"].append(entry)
+        else:
+            standalone.append(entry)
+
+    # Build display list: each element is either a standalone entry or a group dict
+    # Interleave by occurred_on descending
+    display: list = []
+    gi = sorted(groups.values(), key=lambda g: g["occurred_on"], reverse=True)
+    si = list(standalone)
+
+    gi_idx = si_idx = 0
+    while gi_idx < len(gi) or si_idx < len(si):
+        g_date = gi[gi_idx]["occurred_on"] if gi_idx < len(gi) else None
+        s_date = si[si_idx].occurred_on if si_idx < len(si) else None
+        if g_date and (s_date is None or g_date >= s_date):
+            display.append(("group", gi[gi_idx]))
+            gi_idx += 1
+        else:
+            display.append(("entry", si[si_idx]))
+            si_idx += 1
+
+    return request.app.state.templates.TemplateResponse(
+        "entries_list.html", {"request": request, "display": display}
+    )
 
 
 def resolve_plan_amounts(total_amount: str, installment_amount: str, installment_count: int) -> tuple[Decimal, Decimal, str | None]:
