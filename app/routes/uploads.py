@@ -6,13 +6,13 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from pathlib import Path
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_client
-from app.models import Document, DocumentStatus, DocumentType, User
+from app.models import Document, DocumentStatus, DocumentType, PayslipDeduction, User
 from app.services.audit import log_event
 from app.services.documents import process_document, sync_payslip_outputs
 
@@ -177,6 +177,8 @@ def delete_document(document_id: int, db: Session = Depends(get_db), user: User 
     file_path = Path(document.stored_path)
     if file_path.exists():
         file_path.unlink(missing_ok=True)
+    # Remove dependent rows before deleting the document
+    db.execute(delete(PayslipDeduction).where(PayslipDeduction.document_id == document_id))
     db.delete(document)
     db.commit()
     log_event(db, "documents.delete", user=user, metadata={"document_id": document_id})
