@@ -29,6 +29,11 @@ from app.models import (
 
 
 AMOUNT_PATTERN = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})")
+# Matches weight/unit-price format: "0,4 KG x 79,30" or "2 UN x 15,00"
+_QTY_UNIT_PRICE_RE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(?:kg|un|g|l|ml|pc|pct|cx|lt)\s*x\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
+    re.IGNORECASE,
+)
 INSTALLMENT_PATTERN = re.compile(r"(?P<label>[\w\s\-/]+?)\s+(?P<current>\d{1,2})/(?P<total>\d{1,2})\s+(?P<amount>\d{1,3}(?:\.\d{3})*,\d{2})", re.IGNORECASE)
 COMPETENCE_PATTERN = re.compile(r"(?:competencia|referencia|periodo)\s*[:\-]?\s*([0-1]?\d[/\-]\d{4})", re.IGNORECASE)
 NAME_PATTERN = re.compile(r"(?:nome|colaborador|funcionario)\s*[:\-]?\s*(.+)", re.IGNORECASE)
@@ -300,21 +305,68 @@ def _clean_receipt_label(raw: str) -> str:
     return label[:120]
 
 
+def _parse_br_float(raw: str) -> float:
+    """Parse a Brazilian-formatted number (e.g. '31,72' or '1.234,56') to float."""
+    return float(raw.replace(".", "").replace(",", "."))
+
+
 def extract_receipt_items(lines: list[str]) -> list[dict]:
+    """Extract line items from a Brazilian fiscal receipt.
+
+    Handles weight-based items where the receipt prints:
+        001 843 BISCOITO DE NATA  0,4 KG x 79,30   ← unit price per kg
+                                        31,72        ← actual line total (next line)
+    In this case the code peeks at the next line for a standalone amount, or
+    falls back to computing qty × unit_price.
+    """
     items: list[dict] = []
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         normalized = normalize_text(line)
         if "valor total" in normalized or "forma de pagamento" in normalized:
             break
+
         amount = extract_amount_from_line(line)
         if amount is None:
+            i += 1
             continue
+        # Must contain a 3-digit-or-longer code (product/barcode) to be a product line
         if not re.search(r"\b\d{3,}\b", line):
+            i += 1
             continue
+
+        # Detect weight/unit-price pattern: "0,4 KG x 79,30"
+        qty_match = _QTY_UNIT_PRICE_RE.search(line)
+        if qty_match:
+            # The last AMOUNT_PATTERN match on this line is the unit price, not the total.
+            # Strategy 1: peek at the next line for a standalone amount (most reliable)
+            peeked = None
+            if i + 1 < len(lines):
+                next_line = lines[i + 1]
+                next_amounts = AMOUNT_PATTERN.findall(next_line)
+                # Accept next line if it has exactly one amount and no product code
+                if len(next_amounts) == 1 and not re.search(r"\b\d{3,}\b", next_line):
+                    peeked = _parse_br_float(next_amounts[0])
+                    i += 1  # consume the line-total line so it isn't processed again
+
+            if peeked is not None:
+                amount = peeked
+            else:
+                # Strategy 2: compute qty × unit_price
+                try:
+                    qty = _parse_br_float(qty_match.group(1))
+                    unit_price = _parse_br_float(qty_match.group(2))
+                    amount = round(qty * unit_price, 2)
+                except (ValueError, IndexError):
+                    pass  # keep last amount from the line as a fallback
+
         label = _clean_receipt_label(line)
         if len(label) < 4:
+            i += 1
             continue
         items.append({"label": label, "amount": amount})
+        i += 1
     return items[:10]
 
 
