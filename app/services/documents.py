@@ -1008,16 +1008,20 @@ def _create_entries_from_result(
     is_credit_card = doc_type == DocumentType.CREDIT_CARD
 
     if items:
+        # Use merchant-level category as fallback when item name alone is ambiguous
+        merchant_category = "Cartao" if is_credit_card else categorize_merchant(merchant)
         for item in items:
             label = (item.get("label") or "").strip()
             amount = item.get("amount")
             if not label or not amount or float(amount) <= 0:
                 continue
+            item_category = categorize_merchant(label) if not is_credit_card else "Cartao"
+            category = item_category if item_category != "Outros" else merchant_category
             db.add(FinancialEntry(
                 tenant_id=document.tenant_id,
                 user_id=document.user_id,
                 title=label[:160],
-                category="Cartao" if is_credit_card else categorize_merchant(label),
+                category=category,
                 entry_type=EntryType.EXPENSE,
                 amount=round(float(amount), 2),
                 occurred_on=occurred_on,
