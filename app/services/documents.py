@@ -89,6 +89,27 @@ def normalize_text(value: str) -> str:
     return "".join(char for char in normalized if not unicodedata.combining(char)).lower().strip()
 
 
+_MAX_OCR_PIXELS = 2_000_000  # ~1414×1414 — enough for receipts, safe on free tier
+
+
+def _prepare_image_for_ocr(image: Image.Image) -> Image.Image:
+    """Resize oversized images and convert to grayscale before sending to Tesseract.
+
+    WhatsApp / phone camera images can exceed 12 MP. Running Tesseract on the
+    full resolution exhausts memory on constrained hosts (Railway free tier)
+    and causes the worker process to be killed, leaving documents stuck in
+    PENDING. Resizing to ≤2 MP preserves OCR quality for printed text while
+    keeping memory usage low.
+    """
+    if image.mode not in ("RGB", "L", "RGBA"):
+        image = image.convert("RGB")
+    w, h = image.size
+    if w * h > _MAX_OCR_PIXELS:
+        scale = (_MAX_OCR_PIXELS / (w * h)) ** 0.5
+        image = image.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+    return image.convert("L")  # grayscale improves Tesseract accuracy on receipts
+
+
 def extract_text_from_file(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix in {".txt", ".csv"}:
@@ -99,7 +120,7 @@ def extract_text_from_file(path: Path) -> str:
         if text.strip():
             return text
         return extract_text_from_scanned_pdf(path)
-    image = Image.open(path)
+    image = _prepare_image_for_ocr(Image.open(path))
     try:
         return pytesseract.image_to_string(image, lang="por+eng")
     except pytesseract.TesseractError:
@@ -592,7 +613,8 @@ def process_document(db: Session, document_id: int) -> None:
                 summary = extracted_data.get("summary") or {}
                 total_amount = summary.get("detected_total")
                 merchant = summary.get("merchant") or f"Importacao {document.filename}"
-                occurred_on = parse_date_br(summary.get("occurred_on")) if summary.get("occurred_on") else datetime.utcnow().date()
+                raw_date = summary.get("occurred_on")
+                occurred_on = (parse_date_br(raw_date) if raw_date else None) or datetime.utcnow().date()
                 if total_amount:
                     entry = FinancialEntry(
                         tenant_id=document.tenant_id,
