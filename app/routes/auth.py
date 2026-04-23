@@ -177,7 +177,8 @@ def forgot_password(request: Request, email: str = Form(...), db: Session = Depe
         expires = datetime.utcnow() + timedelta(hours=1)
         db.add(PasswordResetToken(user_id=user.id, token=token_value, expires_at=expires))
         db.commit()
-        reset_url = f"{settings.app_base_url}/reset-password?token={token_value}"
+        base = settings.app_base_url.rstrip("/") if settings.app_base_url else str(request.base_url).rstrip("/")
+        reset_url = f"{base}/reset-password?token={token_value}"
         if settings.smtp_host and settings.smtp_user:
             try:
                 _send_reset_email(user.email, reset_url)
