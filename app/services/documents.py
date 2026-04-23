@@ -409,29 +409,60 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
     return items[:10]
 
 
-_GROQ_VISION_PROMPT = """\
-Analise este comprovante fiscal brasileiro e retorne SOMENTE um JSON válido, sem markdown, sem explicações.
-Formato exato:
+_GROQ_UNIFIED_PROMPT = """\
+Analise esta imagem de documento financeiro brasileiro.
+Primeiro identifique o tipo, depois extraia os dados. Retorne SOMENTE um JSON válido, sem markdown, sem explicações.
+
+Se for HOLERITE / CONTRACHEQUE / FOLHA DE PAGAMENTO:
 {
+  "document_type": "payslip",
+  "employee_name": "nome completo ou null",
+  "company_name": "nome da empresa ou null",
+  "competence": "MM/YYYY ou null",
+  "gross_income": 0.00,
+  "net_income": 0.00,
+  "discounts": 0.00,
+  "inss": 0.00,
+  "irrf": 0.00,
+  "vt": 0.00,
+  "vr": 0.00
+}
+
+Se for NOTA FISCAL / CUPOM / COMPROVANTE DE COMPRA / RECEIPT:
+{
+  "document_type": "receipt",
   "merchant": "nome do estabelecimento",
   "date": "YYYY-MM-DD ou null",
   "items": [{"label": "nome do produto", "amount": 0.00}],
   "total": 0.00
 }
-Regras:
-- Para itens vendidos por peso (KG/g), use o valor total pago (quantidade × preço unitário), não o preço por kg.
+
+Se for FATURA DE CARTÃO DE CRÉDITO:
+{
+  "document_type": "credit_card",
+  "merchant": "nome da operadora ou null",
+  "date": "YYYY-MM-DD ou null",
+  "items": [{"label": "descricao do lancamento", "amount": 0.00}],
+  "total": 0.00
+}
+
+Regras gerais:
+- Valores numéricos sempre em float (ex: 31,72 → 31.72).
+- Para itens por peso (KG/g): use valor total pago (qtd × preço unitário), não o preço por kg.
 - Ignore linhas de impostos aproximados (Vir Aprox. Impostos).
-- "total" é o valor total da nota. Se não encontrar, some os itens.
-- Valores em formato brasileiro: vírgula como decimal (ex: 31,72 → 31.72 no JSON).
-- Se não encontrar um campo, use null.
+- Campos não encontrados: use null (nunca omita a chave).
+- Para holerite, campos de valor não encontrados: use null (nunca 0.00).
 """
 
+_GROQ_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+_GROQ_MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
-def _extract_receipt_with_groq(image_path: Path, filename: str) -> tuple[dict, float] | None:
-    """Use Llama Vision via Groq to extract receipt data from an image.
 
-    Returns None if GROQ_API_KEY is not set or if the call fails, so the
-    caller can fall back to the Tesseract-based pipeline.
+def _analyze_image_with_groq(image_path: Path, filename: str) -> tuple[DocumentType, dict, float] | None:
+    """Use Llama Vision via Groq to detect document type AND extract data in one call.
+
+    Returns (detected_type, extracted_data, confidence) or None on failure/no key.
+    The caller should update document.document_type with detected_type.
     """
     from app.config import get_settings
     api_key = get_settings().groq_api_key
@@ -439,8 +470,10 @@ def _extract_receipt_with_groq(image_path: Path, filename: str) -> tuple[dict, f
         return None
 
     suffix = image_path.suffix.lower()
-    media_type_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
-    media_type = media_type_map.get(suffix, "image/jpeg")
+    if suffix not in _GROQ_IMAGE_SUFFIXES:
+        return None
+
+    media_type = _GROQ_MEDIA_TYPES.get(suffix, "image/jpeg")
 
     try:
         from groq import Groq
@@ -453,7 +486,7 @@ def _extract_receipt_with_groq(image_path: Path, filename: str) -> tuple[dict, f
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_data}"}},
-                    {"type": "text", "text": _GROQ_VISION_PROMPT},
+                    {"type": "text", "text": _GROQ_UNIFIED_PROMPT},
                 ],
             }],
             max_tokens=1024,
@@ -461,35 +494,68 @@ def _extract_receipt_with_groq(image_path: Path, filename: str) -> tuple[dict, f
         )
 
         raw = response.choices[0].message.content or ""
-        # Strip markdown code fences if model wrapped the JSON
         raw = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
         raw = re.sub(r"\s*```$", "", raw.strip())
         data = json.loads(raw)
 
-        items = [
-            {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
-            for it in (data.get("items") or [])
-            if it.get("label") and it.get("amount") is not None
-        ]
-        total = data.get("total")
-        if total is None and items:
-            total = round(sum(i["amount"] for i in items), 2)
+        doc_type_str = (data.get("document_type") or "receipt").lower()
+        if doc_type_str == "payslip":
+            detected_type = DocumentType.PAYSLIP
+        elif doc_type_str == "credit_card":
+            detected_type = DocumentType.CREDIT_CARD
+        else:
+            detected_type = DocumentType.RECEIPT
 
-        raw_date = data.get("date")
-        occurred_on = _parse_any_date(raw_date)
+        if detected_type == DocumentType.PAYSLIP:
+            def _f(key: str) -> float | None:
+                v = data.get(key)
+                return float(v) if v is not None else None
 
-        summary = {
-            "merchant": (data.get("merchant") or filename)[:160],
-            "detected_total": float(total) if total is not None else None,
-            "occurred_on": occurred_on.isoformat() if occurred_on else None,
-            "document_kind": "receipt",
-            "extracted_by": "groq-llama-vision",
-        }
-        confidence = 0.92 if total is not None else 0.65
-        return {"summary": summary, "items": items}, confidence
+            summary = {
+                "employee_name": data.get("employee_name"),
+                "company_name": data.get("company_name"),
+                "competence": data.get("competence"),
+                "gross_income": _f("gross_income"),
+                "net_income": _f("net_income"),
+                "discounts": _f("discounts"),
+                "inss": _f("inss"),
+                "irrf": _f("irrf"),
+                "vt": _f("vt"),
+                "vr": _f("vr"),
+            }
+            filled = sum(1 for k in ("gross_income", "net_income", "discounts", "inss", "irrf") if summary[k] is not None)
+            confidence = min(0.50 + filled * 0.09, 0.95)
+            extracted_data = {
+                "document_kind": "payslip",
+                "filename": filename,
+                "summary": summary,
+                "items": [],
+                "extracted_by": "groq-llama-vision",
+            }
+        else:
+            items = [
+                {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
+                for it in (data.get("items") or [])
+                if it.get("label") and it.get("amount") is not None
+            ]
+            total = data.get("total")
+            if total is None and items:
+                total = round(sum(i["amount"] for i in items), 2)
+            occurred_on = _parse_any_date(data.get("date"))
+            summary = {
+                "merchant": (data.get("merchant") or filename)[:160],
+                "detected_total": float(total) if total is not None else None,
+                "occurred_on": occurred_on.isoformat() if occurred_on else None,
+                "document_kind": doc_type_str,
+                "extracted_by": "groq-llama-vision",
+            }
+            confidence = 0.92 if total is not None else 0.65
+            extracted_data = {"summary": summary, "items": items}
+
+        return detected_type, extracted_data, confidence
 
     except Exception as exc:
-        logging.warning("Groq vision extraction failed, falling back to Tesseract: %s", exc)
+        logging.warning("Groq vision analysis failed, falling back to Tesseract: %s", exc)
         return None
 
 
@@ -778,15 +844,50 @@ def process_document(db: Session, document_id: int) -> None:
         return
 
     try:
-        text = extract_text_from_file(Path(document.stored_path))
+        stored_path = Path(document.stored_path)
+        text = extract_text_from_file(stored_path)
         extracted_data: dict = {"summary": {}, "items": []}
         confidence = 0.45
 
-        if document.document_type == DocumentType.PAYSLIP:
+        # ── Groq Vision: auto-detect type + extract (images only) ──────────────
+        # Overrides the user's document_type selection when the LLM disagrees,
+        # preventing e.g. a receipt uploaded as "payslip" from creating fake income.
+        groq_result = _analyze_image_with_groq(stored_path, document.filename)
+        if groq_result is not None:
+            detected_type, extracted_data, confidence = groq_result
+            if detected_type != document.document_type:
+                logging.info(
+                    "document %s: user selected %s but LLM detected %s — overriding",
+                    document_id, document.document_type, detected_type,
+                )
+                document.document_type = detected_type
+
+            if detected_type == DocumentType.PAYSLIP:
+                sync_payslip_outputs(db, document, extracted_data)
+            else:
+                summary = extracted_data.get("summary") or {}
+                total_amount = summary.get("detected_total")
+                merchant = summary.get("merchant") or f"Importacao {document.filename}"
+                occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
+                if total_amount:
+                    db.add(FinancialEntry(
+                        tenant_id=document.tenant_id,
+                        user_id=document.user_id,
+                        title=merchant[:160],
+                        category="Cartao" if detected_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
+                        entry_type=EntryType.EXPENSE,
+                        amount=round(total_amount, 2),
+                        occurred_on=occurred_on,
+                        source="upload",
+                        notes="Lancamento gerado por visao LLM (Groq)",
+                    ))
+
+        # ── Tesseract fallback (PDFs, or when Groq is not configured/failed) ───
+        elif document.document_type == DocumentType.PAYSLIP:
             extracted_data, confidence = extract_payslip_data(text, document.filename)
             sync_payslip_outputs(db, document, extracted_data)
 
-        elif document.document_type in {DocumentType.CREDIT_CARD, DocumentType.RECEIPT, DocumentType.OTHER}:
+        else:
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             for line in lines:
                 match = INSTALLMENT_PATTERN.search(line)
@@ -823,24 +924,13 @@ def process_document(db: Session, document_id: int) -> None:
                     extracted_data["items"].append({"title": title, "installment": f"{current}/{total}", "amount": amount})
 
             if not extracted_data["items"]:
-                # Try Groq Llama Vision first (image files only); fall back to Tesseract text
-                stored_path = Path(document.stored_path)
-                groq_result = None
-                if stored_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-                    groq_result = _extract_receipt_with_groq(stored_path, document.filename)
-
-                if groq_result is not None:
-                    extracted_data, confidence = groq_result
-                else:
-                    extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
-
+                extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
                 summary = extracted_data.get("summary") or {}
                 total_amount = summary.get("detected_total")
                 merchant = summary.get("merchant") or f"Importacao {document.filename}"
-                raw_date = summary.get("occurred_on")
-                occurred_on = _parse_any_date(raw_date) or datetime.utcnow().date()
+                occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
                 if total_amount:
-                    entry = FinancialEntry(
+                    db.add(FinancialEntry(
                         tenant_id=document.tenant_id,
                         user_id=document.user_id,
                         title=merchant[:160],
@@ -850,8 +940,7 @@ def process_document(db: Session, document_id: int) -> None:
                         occurred_on=occurred_on,
                         source="upload",
                         notes="Lancamento resumido gerado por extracao automatica",
-                    )
-                    db.add(entry)
+                    ))
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]
