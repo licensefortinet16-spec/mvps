@@ -156,15 +156,24 @@ def parse_brazilian_amount(raw: str) -> float:
 
 def categorize_merchant(title: str) -> str:
     value = title.lower()
-    if any(token in value for token in ["mercado", "super", "atac", "carrefour"]):
+    if any(token in value for token in ["mercado", "super", "atac", "carrefour", "atacad", "hortifrut", "feira"]):
         return "Mercado"
-    if any(token in value for token in ["uber", "99", "posto", "combustivel"]):
+    if any(token in value for token in ["padaria", "panificadora", "confeitaria", "lanchonete", "restaurante",
+                                         "pizzaria", "hamburger", "burger", "cafe", "cafeteria", "sorveteria",
+                                         "america", "pao", "doce", "salgado", "refeicao", "buffet"]):
+        return "Alimentacao"
+    if any(token in value for token in ["uber", "99", "posto", "combustivel", "gasolina", "shell", "ipiranga",
+                                         "petrobras", "estacionamento", "parking", "onibus", "metro"]):
         return "Transporte"
-    if any(token in value for token in ["netflix", "spotify", "cinema"]):
+    if any(token in value for token in ["netflix", "spotify", "cinema", "show", "ingresso", "teatro",
+                                         "amazon prime", "disney", "hbo", "youtube"]):
         return "Lazer"
-    if any(token in value for token in ["farm", "drog", "saude"]):
+    if any(token in value for token in ["farm", "drog", "saude", "clinica", "hospital", "medico",
+                                         "odonto", "laboratorio", "exame"]):
         return "Saude"
-    return "Cartao"
+    if any(token in value for token in ["escola", "faculdade", "curso", "universidade", "colegio"]):
+        return "Educacao"
+    return "Outros"
 
 
 def extract_amount_from_line(line: str) -> float | None:
@@ -226,6 +235,18 @@ def parse_date_br(value: str) -> date | None:
         return None
 
 
+def _parse_any_date(value: str | None) -> date | None:
+    """Try ISO (YYYY-MM-DD) then BR (DD/MM/YYYY) format."""
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def infer_receipt_merchant(lines: list[str]) -> str | None:
     for line in lines[:8]:
         cleaned = normalize_spaces(line)
@@ -261,6 +282,24 @@ def extract_receipt_date(lines: list[str]) -> date | None:
     return None
 
 
+_RECEIPT_ITEM_NOISE = re.compile(
+    r"""
+    ^\d{1,3}\s+          # leading sequence number: "001 ", "02 "
+    | \b\d{8,}\b         # barcode / long numeric codes
+    | \s+x\s+[\d,]+$     # trailing multiplier " x 31,7"
+    | \s+un\b            # unit suffix
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _clean_receipt_label(raw: str) -> str:
+    label = AMOUNT_PATTERN.sub("", raw)         # remove currency amounts
+    label = _RECEIPT_ITEM_NOISE.sub(" ", label) # remove noise patterns
+    label = re.sub(r"\s+", " ", label).strip(" -:%.")
+    return label[:120]
+
+
 def extract_receipt_items(lines: list[str]) -> list[dict]:
     items: list[dict] = []
     for line in lines:
@@ -272,10 +311,10 @@ def extract_receipt_items(lines: list[str]) -> list[dict]:
             continue
         if not re.search(r"\b\d{3,}\b", line):
             continue
-        label = normalize_spaces(AMOUNT_PATTERN.sub("", line))
+        label = _clean_receipt_label(line)
         if len(label) < 4:
             continue
-        items.append({"label": label[:160], "amount": amount})
+        items.append({"label": label, "amount": amount})
     return items[:10]
 
 
@@ -614,7 +653,7 @@ def process_document(db: Session, document_id: int) -> None:
                 total_amount = summary.get("detected_total")
                 merchant = summary.get("merchant") or f"Importacao {document.filename}"
                 raw_date = summary.get("occurred_on")
-                occurred_on = (parse_date_br(raw_date) if raw_date else None) or datetime.utcnow().date()
+                occurred_on = _parse_any_date(raw_date) or datetime.utcnow().date()
                 if total_amount:
                     entry = FinancialEntry(
                         tenant_id=document.tenant_id,
