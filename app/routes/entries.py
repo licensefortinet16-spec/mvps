@@ -502,10 +502,10 @@ def list_entries(request: Request, db: Session = Depends(get_db), user: User = D
                     "category": entry.category,
                     "entry_type": entry.entry_type,
                     "total": 0.0,
-                    "items": [],
+                    "sub_items": [],
                 }
             groups[doc_id]["total"] = round(groups[doc_id]["total"] + float(entry.amount), 2)
-            groups[doc_id]["items"].append(entry)
+            groups[doc_id]["sub_items"].append(entry)
         else:
             standalone.append(entry)
 

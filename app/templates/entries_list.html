@@ -24,7 +24,7 @@
         <div class="min-w-0 flex-1">
           <p class="truncate font-semibold text-slate-900">{{ row.merchant }}</p>
           <p class="text-xs text-slate-400">
-            {{ row.occurred_on }} · {{ row.items|length }} {{ 'item' if row.items|length == 1 else 'itens' }}
+            {{ row.occurred_on }} · {{ row.sub_items|length }} {{ 'item' if row.sub_items|length == 1 else 'itens' }}
             · <span class="rounded-full bg-teal-50 px-2 py-0.5 text-teal-700">upload</span>
           </p>
         </div>
@@ -38,7 +38,7 @@
       <div class="border-t border-slate-100 px-4 pb-3">
         <table class="min-w-full text-sm">
           <tbody>
-            {% for entry in row.items %}
+            {% for entry in row.sub_items %}
             <tr class="border-b border-slate-50 last:border-0">
               <td class="py-2 pl-6 text-slate-700">{{ entry.title }}</td>
               <td class="py-2 text-slate-400">{{ entry.category }}</td>
