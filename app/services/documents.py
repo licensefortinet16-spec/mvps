@@ -614,7 +614,19 @@ def process_document(db: Session, document_id: int) -> None:
         document.processed_at = datetime.utcnow()
         db.commit()
     except Exception as exc:
-        document.status = DocumentStatus.FAILED
-        document.extracted_data = {"error": str(exc)}
-        document.processed_at = datetime.utcnow()
-        db.commit()
+        # Always rollback first: if the exception came from a DB operation the
+        # session is in "pending rollback" state and a bare commit() would raise
+        # PendingRollbackError, leaving the document stuck as PENDING forever.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        try:
+            fresh = db.get(Document, document_id)
+            if fresh:
+                fresh.status = DocumentStatus.FAILED
+                fresh.extracted_data = {"error": str(exc)[:500]}
+                fresh.processed_at = datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass

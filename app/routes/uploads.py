@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
+from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_client
-from app.models import Document, DocumentType, User
+from app.models import Document, DocumentStatus, DocumentType, User
 from app.services.audit import log_event
 from app.services.documents import process_document, sync_payslip_outputs
 
@@ -19,8 +21,27 @@ router = APIRouter(prefix="/uploads")
 settings = get_settings()
 
 
+def _mark_stale_pending_as_failed(db: Session, tenant_id: int) -> None:
+    """Documents stuck in PENDING for more than 10 minutes are considered failed."""
+    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    stale = db.execute(
+        select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.status == DocumentStatus.PENDING,
+            Document.created_at < cutoff,
+        )
+    ).scalars().all()
+    for doc in stale:
+        doc.status = DocumentStatus.FAILED
+        doc.extracted_data = {"error": "Processamento nao concluido. O arquivo pode ser inválido ou muito grande."}
+        doc.processed_at = datetime.utcnow()
+    if stale:
+        db.commit()
+
+
 @router.get("")
 def uploads_page(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    _mark_stale_pending_as_failed(db, user.tenant_id)
     documents = (
         db.execute(
             select(Document)
@@ -123,6 +144,42 @@ async def save_review(document_id: int, request: Request, db: Session = Depends(
     sync_payslip_outputs(db, document, document.extracted_data)
     log_event(db, "documents.reviewed", user=user, metadata={"document_id": document.id, "type": document.document_type.value})
     db.commit()
+    return RedirectResponse("/uploads", status_code=303)
+
+
+@router.post("/{document_id}/retry")
+def retry_upload(document_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    document = db.get(Document, document_id)
+    if not document or document.tenant_id != user.tenant_id:
+        return RedirectResponse("/uploads", status_code=303)
+    if not Path(document.stored_path).exists():
+        document.status = DocumentStatus.FAILED
+        document.extracted_data = {"error": "Arquivo nao encontrado no servidor. Faca o upload novamente."}
+        document.processed_at = datetime.utcnow()
+        db.commit()
+        return RedirectResponse("/uploads", status_code=303)
+    document.status = DocumentStatus.PENDING
+    document.extracted_data = None
+    document.extracted_text = None
+    document.confidence = 0.0
+    document.processed_at = None
+    db.commit()
+    process_document(db, document.id)
+    log_event(db, "documents.retry", user=user, metadata={"document_id": document.id})
+    return RedirectResponse("/uploads", status_code=303)
+
+
+@router.post("/{document_id}/delete")
+def delete_document(document_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_client)):
+    document = db.get(Document, document_id)
+    if not document or document.tenant_id != user.tenant_id:
+        return RedirectResponse("/uploads", status_code=303)
+    file_path = Path(document.stored_path)
+    if file_path.exists():
+        file_path.unlink(missing_ok=True)
+    db.delete(document)
+    db.commit()
+    log_event(db, "documents.delete", user=user, metadata={"document_id": document_id})
     return RedirectResponse("/uploads", status_code=303)
 
 
