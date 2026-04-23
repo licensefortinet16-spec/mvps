@@ -990,6 +990,57 @@ def sync_payslip_outputs(db: Session, document: Document, extracted_data: dict) 
         )
 
 
+def _create_entries_from_result(
+    db: Session,
+    document: Document,
+    extracted_data: dict,
+    doc_type: DocumentType,
+) -> None:
+    """Create one FinancialEntry per extracted item (receipt / credit card).
+
+    Falls back to a single summary entry using detected_total when there are
+    no individual items (e.g. Tesseract extracted only the total).
+    """
+    summary = extracted_data.get("summary") or {}
+    items = extracted_data.get("items") or []
+    occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
+    merchant = (summary.get("merchant") or document.filename)[:160]
+    is_credit_card = doc_type == DocumentType.CREDIT_CARD
+
+    if items:
+        for item in items:
+            label = (item.get("label") or "").strip()
+            amount = item.get("amount")
+            if not label or not amount or float(amount) <= 0:
+                continue
+            db.add(FinancialEntry(
+                tenant_id=document.tenant_id,
+                user_id=document.user_id,
+                title=label[:160],
+                category="Cartao" if is_credit_card else categorize_merchant(label),
+                entry_type=EntryType.EXPENSE,
+                amount=round(float(amount), 2),
+                occurred_on=occurred_on,
+                source="upload",
+                notes=f"Importado de {merchant} (document_id={document.id})",
+            ))
+    else:
+        # No items — fall back to single total entry
+        total_amount = summary.get("detected_total")
+        if total_amount:
+            db.add(FinancialEntry(
+                tenant_id=document.tenant_id,
+                user_id=document.user_id,
+                title=merchant,
+                category="Cartao" if is_credit_card else categorize_merchant(merchant),
+                entry_type=EntryType.EXPENSE,
+                amount=round(float(total_amount), 2),
+                occurred_on=occurred_on,
+                source="upload",
+                notes=f"Total importado automaticamente (document_id={document.id})",
+            ))
+
+
 def process_document(db: Session, document_id: int) -> None:
     document = db.get(Document, document_id)
     if not document:
@@ -1021,22 +1072,7 @@ def process_document(db: Session, document_id: int) -> None:
             if detected_type == DocumentType.PAYSLIP:
                 sync_payslip_outputs(db, document, extracted_data)
             else:
-                summary = extracted_data.get("summary") or {}
-                total_amount = summary.get("detected_total")
-                merchant = summary.get("merchant") or f"Importacao {document.filename}"
-                occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
-                if total_amount:
-                    db.add(FinancialEntry(
-                        tenant_id=document.tenant_id,
-                        user_id=document.user_id,
-                        title=merchant[:160],
-                        category="Cartao" if detected_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
-                        entry_type=EntryType.EXPENSE,
-                        amount=round(total_amount, 2),
-                        occurred_on=occurred_on,
-                        source="upload",
-                        notes="Lancamento gerado por LLM (Groq)",
-                    ))
+                _create_entries_from_result(db, document, extracted_data, detected_type)
 
         # ── Tesseract-only fallback (GROQ_API_KEY not set or Groq call failed) ─
         else:
@@ -1086,22 +1122,7 @@ def process_document(db: Session, document_id: int) -> None:
 
                 if not extracted_data["items"]:
                     extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
-                    summary = extracted_data.get("summary") or {}
-                    total_amount = summary.get("detected_total")
-                    merchant = summary.get("merchant") or f"Importacao {document.filename}"
-                    occurred_on = _parse_any_date(summary.get("occurred_on")) or datetime.utcnow().date()
-                    if total_amount:
-                        db.add(FinancialEntry(
-                            tenant_id=document.tenant_id,
-                            user_id=document.user_id,
-                            title=merchant[:160],
-                            category="Cartao" if document.document_type == DocumentType.CREDIT_CARD else categorize_merchant(merchant),
-                            entry_type=EntryType.EXPENSE,
-                            amount=round(total_amount, 2),
-                            occurred_on=occurred_on,
-                            source="upload",
-                            notes="Lancamento resumido gerado por extracao automatica",
-                        ))
+                    _create_entries_from_result(db, document, extracted_data, document.document_type)
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]
