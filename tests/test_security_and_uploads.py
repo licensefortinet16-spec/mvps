@@ -254,3 +254,98 @@ def test_document_review_retry_and_delete_cannot_cross_tenants(client, tmp_path)
         assert db.get(Document, document_id) is not None
     finally:
         db.close()
+
+
+def test_poor_quality_image_upload_is_marked_failed(client, tmp_path):
+    from PIL import Image
+
+    from app.db import SessionLocal
+    from app.models import Document, DocumentStatus, DocumentType, User
+    from app.services.documents import process_document
+
+    register(client, "Cliente Foto Ruim", "poor-image@test.local")
+    image_path = tmp_path / "escura.jpg"
+    Image.new("RGB", (640, 640), color=(8, 8, 8)).save(image_path)
+
+    db = SessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == "poor-image@test.local"))
+        assert user is not None
+        document = Document(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            filename="escura.jpg",
+            stored_path=str(image_path),
+            content_hash="poor-quality",
+            file_size=image_path.stat().st_size,
+            content_type="image/jpeg",
+            document_type=DocumentType.RECEIPT,
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+
+        process_document(db, document.id)
+        db.refresh(document)
+
+        assert document.status == DocumentStatus.FAILED
+        assert document.confidence == 0.0
+        assert document.extracted_data["error_code"] == "poor_image_quality"
+        assert "qualidade da foto" in document.extracted_data["error"].lower()
+        assert document.extracted_data["image_quality"]["is_acceptable"] is False
+    finally:
+        db.close()
+
+
+def test_empty_image_extraction_is_not_useful():
+    from app.models import DocumentType
+    from app.services.documents import has_useful_extraction
+
+    assert has_useful_extraction(DocumentType.RECEIPT, {"summary": {}, "items": []}) is False
+    assert has_useful_extraction(DocumentType.RECEIPT, {"summary": {"detected_total": 10.0}, "items": []}) is True
+    assert has_useful_extraction(DocumentType.PAYSLIP, {"summary": {"net_income": None}, "items": []}) is False
+    assert has_useful_extraction(DocumentType.PAYSLIP, {"summary": {"net_income": 1000.0}, "items": []}) is True
+
+
+def test_spending_validation_accounts_for_item_discounts():
+    from app.services.documents import can_auto_consolidate_spending, validate_spending_totals
+
+    extracted = validate_spending_totals(
+        {
+            "summary": {"detected_total": 64.28},
+            "items": [
+                {"label": "Leite", "net_amount": 5.39},
+                {"label": "Racao", "net_amount": 43.90},
+                {"label": "Ovos", "gross_amount": 18.99, "discount_amount": 4.00, "net_amount": 14.99},
+            ],
+        }
+    )
+
+    assert extracted["summary"]["items_total"] == 64.28
+    assert extracted["summary"]["gross_items_total"] == 68.28
+    assert extracted["summary"]["item_discounts_total"] == 4.0
+    assert extracted["summary"]["has_total_mismatch"] is False
+    assert extracted["warnings"] == []
+    assert can_auto_consolidate_spending(extracted) is True
+
+
+def test_spending_validation_blocks_mismatched_receipt_totals():
+    from app.services.documents import adjust_spending_confidence, can_auto_consolidate_spending, validate_spending_totals
+
+    extracted = validate_spending_totals(
+        {
+            "summary": {"detected_total": 64.28},
+            "items": [
+                {"label": "Leite", "amount": 5.39},
+                {"label": "Racao", "amount": 43.90},
+                {"label": "Ovos", "amount": 8.88},
+            ],
+        }
+    )
+
+    assert extracted["summary"]["items_total"] == 58.17
+    assert extracted["summary"]["total_difference"] == -6.11
+    assert extracted["summary"]["has_total_mismatch"] is True
+    assert extracted["warnings"][0]["code"] == "receipt_total_mismatch"
+    assert adjust_spending_confidence(extracted, 0.92) == 0.49
+    assert can_auto_consolidate_spending(extracted) is False

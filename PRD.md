@@ -56,6 +56,7 @@ Hoje o usuario precisa acompanhar manualmente holerites, faturas, notas, despesa
 
 - Upload de holerite em PDF, imagem ou formatos suportados.
 - Upload de fatura de cartao, extrato, notas e comprovantes.
+- Validacao de qualidade para fotos antes de OCR ou IA, incluindo nitidez, brilho, contraste e resolucao.
 - Processamento automatico para extrair:
   - Rendimentos brutos e liquidos.
   - Descontos obrigatorios e opcionais.
@@ -63,10 +64,11 @@ Hoje o usuario precisa acompanhar manualmente holerites, faturas, notas, despesa
   - Despesas por categoria.
   - Nome do estabelecimento.
   - Data da compra.
-  - Valor total.
+  - Valor bruto, desconto e valor final por item quando o documento apresentar promocao ou abatimento.
+  - Valor total final pago.
   - Quantidade de parcelas e valor por parcela.
   - Referencia de competencia ou fechamento, quando existir.
-- Confirmacao e revisao manual antes da consolidacao, quando houver baixa confianca na extracao.
+- Confirmacao e revisao manual antes da consolidacao quando houver baixa confianca, foto ruim ou divergencia entre soma dos itens e total pago.
 
 ### 5.4 Classificacao de Lancamentos
 
@@ -212,7 +214,8 @@ Hoje o usuario precisa acompanhar manualmente holerites, faturas, notas, despesa
 
 - Estabelecimento.
 - Data.
-- Valor.
+- Valor final pago.
+- Valor bruto e desconto por item quando disponivel.
 - Categoria sugerida.
 - Numero de parcelas.
 - Valor de cada parcela.
@@ -257,6 +260,8 @@ Hoje o usuario precisa acompanhar manualmente holerites, faturas, notas, despesa
 ## 14. Indicadores de Sucesso
 
 - Percentual de documentos extraidos com sucesso.
+- Percentual de documentos rejeitados por baixa qualidade de imagem.
+- Percentual de documentos bloqueados por divergencia entre soma de itens e total.
 - Percentual de extracoes corrigidas manualmente.
 - Tempo medio para processar um documento.
 - Numero de usuarios ativos mensais.
@@ -269,6 +274,8 @@ Hoje o usuario precisa acompanhar manualmente holerites, faturas, notas, despesa
 - Usuario consegue se cadastrar manualmente e com Google.
 - Usuario consegue enviar holerite, fatura e nota.
 - Sistema extrai valores principais e cria lancamentos.
+- Sistema nao consolida automaticamente nota/comprovante quando os totais nao fecham.
+- Sistema informa quando uma foto esta ruim demais para extracao confiavel.
 - Usuario consegue incluir despesas e rendimentos manualmente.
 - Dashboard exibe graficos basicos e resumo mensal.
 - Sistema identifica parcelas e cria compromissos futuros.

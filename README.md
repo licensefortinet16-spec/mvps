@@ -6,6 +6,8 @@ MVP inicial de um sistema financeiro multi-tenant com:
 - Isolamento por tenant no backend.
 - Lancamentos manuais.
 - Upload de documentos com processamento no backend.
+- Validacao de qualidade de imagem antes de OCR/IA.
+- Validacao de totais e descontos em notas antes da consolidacao.
 - Parcelamentos e previsoes basicas.
 - Dashboard responsivo.
 - Area admin com metricas agregadas, sem dados de clientes.
@@ -62,6 +64,13 @@ pytest
 - Imagem suportada pelo `Pillow`.
 - Arquivos `txt` e `csv`.
 - Cliques repetidos no mesmo upload sao ignorados por hash do arquivo dentro de uma janela curta.
+- Fotos muito escuras, borradas, pequenas ou sem contraste sao marcadas como falha de qualidade antes da extracao.
+- Cupons com desconto por item podem armazenar valor bruto, desconto e valor final.
+- Se a soma dos itens nao fechar com o total pago, a confianca cai e o documento exige revisao manual antes de consolidar.
+
+## Documentacao tecnica
+
+- [Processamento de Documentos](docs/document-processing.md)
 
 ## Google Login
 
@@ -95,4 +104,4 @@ Para subir no Railway:
 
 - O processamento de documentos acontece apenas no backend.
 - O admin nao acessa dados financeiros por tenant.
-- O parser atual e MVP e usa heuristicas simples para holerites e parcelamentos.
+- O parser atual e MVP e combina heuristicas, OCR e IA opcional por ambiente.

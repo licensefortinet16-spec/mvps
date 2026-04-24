@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_path = tmp_path / "test.db"
     upload_path = tmp_path / "uploads"
+    monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
     monkeypatch.setenv("UPLOAD_DIR", str(upload_path))
     monkeypatch.setenv("SECRET_KEY", "test-secret")
@@ -23,6 +24,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     import app.config
     import app.db
+    import app.models
     import app.routes.admin
     import app.routes.auth
     import app.routes.categories
@@ -33,6 +35,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     app.config.get_settings.cache_clear()
     importlib.reload(app.db)
+    importlib.reload(app.models)
     importlib.reload(app.routes.admin)
     importlib.reload(app.routes.auth)
     importlib.reload(app.routes.categories)

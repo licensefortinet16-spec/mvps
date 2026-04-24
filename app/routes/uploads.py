@@ -18,7 +18,7 @@ from app.db import SessionLocal, get_db
 from app.deps import get_current_client
 from app.models import Document, DocumentStatus, DocumentType, PayslipDeduction, User
 from app.services.audit import log_event
-from app.services.documents import process_document, sync_payslip_outputs, sync_spending_outputs
+from app.services.documents import process_document, sync_payslip_outputs, sync_spending_outputs, validate_spending_totals
 
 
 router = APIRouter(prefix="/uploads")
@@ -196,6 +196,7 @@ def review_upload(document_id: int, request: Request, db: Session = Depends(get_
             "document": document,
             "summary": summary,
             "items": items,
+            "warnings": extracted_data.get("warnings") or [],
         },
     )
 
@@ -212,14 +213,26 @@ async def save_review(document_id: int, request: Request, db: Session = Depends(
         occurred_on = (form.get("occurred_on") or "").strip() or None
         detected_total = _parse_optional_float(form.get("detected_total"))
         labels = form.getlist("item_label")
+        gross_amounts = form.getlist("item_gross_amount")
+        discount_amounts = form.getlist("item_discount_amount")
         amounts = form.getlist("item_amount")
         items = []
-        for label, amount in zip(labels, amounts):
+        for index, (label, amount) in enumerate(zip(labels, amounts)):
             clean_label = (label or "").strip()
+            gross_amount = _parse_optional_float(gross_amounts[index]) if index < len(gross_amounts) else None
+            discount_amount = _parse_optional_float(discount_amounts[index]) if index < len(discount_amounts) else None
             clean_amount = _parse_optional_float(amount)
             if clean_label and clean_amount and clean_amount > 0:
-                items.append({"label": clean_label[:120], "amount": clean_amount})
-        document.extracted_data = {
+                items.append(
+                    {
+                        "label": clean_label[:120],
+                        "gross_amount": gross_amount,
+                        "discount_amount": discount_amount,
+                        "net_amount": clean_amount,
+                        "amount": clean_amount,
+                    }
+                )
+        extracted_data = validate_spending_totals({
             "summary": {
                 "merchant": merchant,
                 "detected_total": detected_total,
@@ -227,7 +240,25 @@ async def save_review(document_id: int, request: Request, db: Session = Depends(
                 "document_kind": document.document_type.value,
             },
             "items": items,
-        }
+        })
+        if (extracted_data.get("summary") or {}).get("has_total_mismatch"):
+            document.extracted_data = extracted_data
+            document.confidence = min(document.confidence, 0.49)
+            db.commit()
+            return request.app.state.templates.TemplateResponse(
+                "upload_review.html",
+                {
+                    "request": request,
+                    "document": document,
+                    "summary": extracted_data.get("summary") or {},
+                    "items": extracted_data.get("items") or [],
+                    "warnings": extracted_data.get("warnings") or [],
+                    "error": "A soma dos itens nao fecha com o total detectado. Corrija o total, os descontos ou os valores finais antes de consolidar.",
+                },
+                status_code=400,
+            )
+        document.extracted_data = extracted_data
+        document.confidence = max(document.confidence, 0.9)
         sync_spending_outputs(db, document, document.extracted_data)
         log_event(db, "documents.reviewed", user=user, metadata={"document_id": document.id, "type": document.document_type.value})
         db.commit()

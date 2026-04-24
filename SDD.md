@@ -176,17 +176,23 @@ Definicao:
 - Upload.
 - Registro do documento.
 - Validacao tecnica do arquivo.
+- Validacao de qualidade de imagem para fotos antes de OCR/IA.
 - Enfileiramento para processamento.
 - Deduplicacao por hash para impedir multiplos registros quando o usuario clica repetidamente no envio.
 - Extracao de texto e campos.
 - Classificacao e normalizacao.
+- Normalizacao de valores brutos, descontos e valores finais em notas e comprovantes.
+- Validacao de fechamento entre soma de itens e total pago.
 - Persistencia dos resultados.
 - Revisao humana opcional.
 
 ### 10.2 Regras
 
-- Se a extracao falhar, o documento permanece revisavel.
+- Se a foto tiver baixa qualidade, o documento falha com mensagem clara para reenvio.
+- Se a extracao nao encontrar dados financeiros uteis em uma imagem, o documento falha com orientacao de nova foto.
 - Se a confianca for baixa, o sistema nao consolida automaticamente sem confirmacao.
+- Se a soma dos itens nao fechar com o total pago, a confianca cai e a consolidacao automatica e bloqueada.
+- Se a extracao falhar por parser/IA, o documento permanece revisavel quando houver dados parciais.
 - Se o documento sugerir parcelamento, o backend cria ou sugere o plano correspondente.
 
 ## 11. Regras de Seguranca
@@ -218,6 +224,7 @@ Definicao:
 - Multi-tenant funcional.
 - Lancamentos manuais.
 - Upload e extracao inicial de documentos.
+- Validacao de qualidade e consistencia antes de consolidar documentos.
 - Dashboards responsivos.
 - Parcelamentos e financiamentos.
 - Previsoes basicas.
@@ -231,4 +238,5 @@ O sistema so pode ser considerado pronto quando:
 - Nenhum dado de um cliente aparecer para outro.
 - O frontend estiver responsivo em telas pequenas e grandes.
 - Uploads e extracoes funcionarem sem processamento no navegador.
+- Fotos de baixa qualidade ou documentos inconsistentes nao gerarem lancamentos automaticos.
 - O admin conseguir ver apenas metricas operacionais.

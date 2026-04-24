@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unicodedata
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 import pytesseract
@@ -102,6 +103,81 @@ def normalize_text(value: str) -> str:
 
 
 _MAX_OCR_PIXELS = 2_000_000  # ~1414×1414 — enough for receipts, safe on free tier
+_MIN_IMAGE_SIDE = 480
+_MIN_IMAGE_PIXELS = 350_000
+_MIN_IMAGE_BRIGHTNESS = 45
+_MAX_IMAGE_BRIGHTNESS = 242
+_MIN_IMAGE_CONTRAST = 18
+_MIN_IMAGE_SHARPNESS = 6
+
+
+class PoorImageQualityError(ValueError):
+    def __init__(self, message: str, details: dict):
+        super().__init__(message)
+        self.details = details
+
+
+def assess_image_quality(path: Path) -> dict:
+    image = Image.open(path)
+    image.load()
+    grayscale = _prepare_image_for_ocr(image)
+    width, height = grayscale.size
+    pixels = width * height
+    histogram = grayscale.histogram()
+    total = sum(histogram) or 1
+    brightness = sum(value * count for value, count in enumerate(histogram)) / total
+    variance = sum(((value - brightness) ** 2) * count for value, count in enumerate(histogram)) / total
+    contrast = variance ** 0.5
+
+    resized = grayscale.resize((min(width, 320), max(1, int(height * min(width, 320) / max(width, 1))))) if width > 320 else grayscale
+    data = list(resized.getdata())
+    rw, rh = resized.size
+    diffs = []
+    for y in range(rh):
+        offset = y * rw
+        for x in range(rw - 1):
+            diffs.append(abs(data[offset + x + 1] - data[offset + x]))
+    for y in range(rh - 1):
+        offset = y * rw
+        next_offset = (y + 1) * rw
+        for x in range(rw):
+            diffs.append(abs(data[next_offset + x] - data[offset + x]))
+    sharpness = sum(diffs) / max(len(diffs), 1)
+
+    issues: list[str] = []
+    if min(width, height) < _MIN_IMAGE_SIDE or pixels < _MIN_IMAGE_PIXELS:
+        issues.append("A imagem esta pequena demais para leitura confiavel.")
+    if brightness < _MIN_IMAGE_BRIGHTNESS:
+        issues.append("A imagem esta muito escura.")
+    elif brightness > _MAX_IMAGE_BRIGHTNESS:
+        issues.append("A imagem esta clara demais ou estourada.")
+    if contrast < _MIN_IMAGE_CONTRAST:
+        issues.append("A imagem tem pouco contraste.")
+    if sharpness < _MIN_IMAGE_SHARPNESS:
+        issues.append("A imagem parece borrada ou fora de foco.")
+
+    return {
+        "width": width,
+        "height": height,
+        "pixels": pixels,
+        "brightness": round(brightness, 2),
+        "contrast": round(contrast, 2),
+        "sharpness": round(sharpness, 2),
+        "issues": issues,
+        "is_acceptable": not issues,
+    }
+
+
+def ensure_image_quality_for_extraction(path: Path) -> dict | None:
+    if path.suffix.lower() not in _GROQ_IMAGE_SUFFIXES:
+        return None
+    quality = assess_image_quality(path)
+    if not quality["is_acceptable"]:
+        raise PoorImageQualityError(
+            "A qualidade da foto esta ruim para extracao. Envie uma nova foto com mais luz, foco e o documento inteiro visivel.",
+            quality,
+        )
+    return quality
 
 
 def _prepare_image_for_ocr(image: Image.Image) -> Image.Image:
@@ -257,6 +333,120 @@ def _parse_any_date(value: str | None) -> date | None:
         except ValueError:
             continue
     return None
+
+
+_MONEY = Decimal("0.01")
+_TOTAL_TOLERANCE = Decimal("0.05")
+
+
+def _money_or_none(value) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value)).quantize(_MONEY, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _money_float(value: Decimal | None) -> float | None:
+    return float(value) if value is not None else None
+
+
+def normalize_spending_item(raw_item: dict) -> dict | None:
+    label = str(raw_item.get("label") or raw_item.get("title") or "").strip()[:120]
+    if not label:
+        return None
+
+    gross = _money_or_none(raw_item.get("gross_amount"))
+    discount = _money_or_none(raw_item.get("discount_amount")) or Decimal("0.00")
+    net = _money_or_none(raw_item.get("net_amount"))
+    legacy_amount = _money_or_none(raw_item.get("amount"))
+
+    if net is None:
+        if gross is not None:
+            net = (gross - discount).quantize(_MONEY, rounding=ROUND_HALF_UP)
+        else:
+            net = legacy_amount
+    if gross is None:
+        gross = (net + discount).quantize(_MONEY, rounding=ROUND_HALF_UP) if net is not None else legacy_amount
+    if net is None or net <= 0:
+        return None
+
+    return {
+        "label": label,
+        "amount": _money_float(net),
+        "gross_amount": _money_float(gross),
+        "discount_amount": _money_float(discount) if discount > 0 else None,
+        "net_amount": _money_float(net),
+    }
+
+
+def validate_spending_totals(extracted_data: dict) -> dict:
+    summary = extracted_data.setdefault("summary", {})
+    items = [item for item in (normalize_spending_item(item) for item in extracted_data.get("items") or []) if item]
+    extracted_data["items"] = items
+
+    total = _money_or_none(summary.get("detected_total"))
+    subtotal = _money_or_none(summary.get("subtotal"))
+    discount_total = _money_or_none(summary.get("discount_total"))
+    items_total = sum((_money_or_none(item.get("amount")) or Decimal("0.00") for item in items), Decimal("0.00")).quantize(_MONEY)
+    gross_items_total = sum((_money_or_none(item.get("gross_amount")) or Decimal("0.00") for item in items), Decimal("0.00")).quantize(_MONEY)
+    item_discounts_total = sum((_money_or_none(item.get("discount_amount")) or Decimal("0.00") for item in items), Decimal("0.00")).quantize(_MONEY)
+
+    if total is None and items:
+        total = items_total
+        summary["detected_total"] = _money_float(total)
+
+    difference = (items_total - total).quantize(_MONEY) if total is not None else Decimal("0.00")
+    has_mismatch = total is not None and abs(difference) > _TOTAL_TOLERANCE
+
+    summary["items_total"] = _money_float(items_total)
+    summary["gross_items_total"] = _money_float(gross_items_total) if gross_items_total > 0 else None
+    summary["item_discounts_total"] = _money_float(item_discounts_total) if item_discounts_total > 0 else None
+    if subtotal is not None:
+        summary["subtotal"] = _money_float(subtotal)
+    if discount_total is not None:
+        summary["discount_total"] = _money_float(discount_total)
+    summary["total_difference"] = _money_float(difference) if total is not None else None
+    summary["has_total_mismatch"] = has_mismatch
+
+    warnings = list(extracted_data.get("warnings") or [])
+    warnings = [warning for warning in warnings if warning.get("code") != "receipt_total_mismatch"]
+    if has_mismatch:
+        warnings.append(
+            {
+                "code": "receipt_total_mismatch",
+                "message": (
+                    "A soma dos itens nao fecha com o total pago do documento. "
+                    "Revise valores, descontos e total antes de consolidar."
+                ),
+                "items_total": _money_float(items_total),
+                "detected_total": _money_float(total),
+                "difference": _money_float(difference),
+            }
+        )
+    extracted_data["warnings"] = warnings
+    return extracted_data
+
+
+def adjust_spending_confidence(extracted_data: dict, confidence: float) -> float:
+    summary = extracted_data.get("summary") or {}
+    if summary.get("has_total_mismatch"):
+        return min(confidence, 0.49)
+    return confidence
+
+
+def can_auto_consolidate_spending(extracted_data: dict) -> bool:
+    summary = extracted_data.get("summary") or {}
+    return bool(extracted_data.get("items") or summary.get("detected_total")) and not summary.get("has_total_mismatch")
+
+
+def has_useful_extraction(document_type: DocumentType, extracted_data: dict) -> bool:
+    summary = extracted_data.get("summary") or {}
+    items = extracted_data.get("items") or []
+    if document_type == DocumentType.PAYSLIP:
+        return any(summary.get(key) for key in ("gross_income", "net_income", "discounts", "inss", "irrf")) or bool(items)
+    return bool(items or summary.get("detected_total"))
 
 
 def infer_receipt_merchant(lines: list[str]) -> str | None:
@@ -433,7 +623,9 @@ Se for NOTA FISCAL / CUPOM / COMPROVANTE DE COMPRA / RECEIPT:
   "document_type": "receipt",
   "merchant": "nome do estabelecimento",
   "date": "YYYY-MM-DD ou null",
-  "items": [{"label": "nome do produto", "amount": 0.00}],
+  "items": [{"label": "nome do produto", "gross_amount": 0.00, "discount_amount": 0.00, "net_amount": 0.00}],
+  "subtotal": 0.00,
+  "discount_total": 0.00,
   "total": 0.00
 }
 
@@ -442,13 +634,16 @@ Se for FATURA DE CARTÃO DE CRÉDITO:
   "document_type": "credit_card",
   "merchant": "nome da operadora ou null",
   "date": "YYYY-MM-DD ou null",
-  "items": [{"label": "descricao do lancamento", "amount": 0.00}],
+  "items": [{"label": "descricao do lancamento", "gross_amount": 0.00, "discount_amount": 0.00, "net_amount": 0.00}],
   "total": 0.00
 }
 
 Regras gerais:
 - Valores numéricos sempre em float (ex: 31,72 → 31.72).
 - Para itens por peso (KG/g): use valor total pago (qtd × preço unitário), não o preço por kg.
+- Em cupom/nota com desconto, preserve o valor original em gross_amount, o desconto positivo em discount_amount e o valor final pago em net_amount.
+- O campo total deve ser o valor final pago do cupom, depois dos descontos. Nao use subtotal como total.
+- A soma de net_amount dos itens deve bater com total. Se houver desconto geral, distribua-o nos itens quando a nota indicar a linha afetada.
 - Ignore linhas de impostos aproximados (Vir Aprox. Impostos).
 - Campos não encontrados: use null (nunca omita a chave).
 - Para holerite, campos de valor não encontrados: use null (nunca 0.00).
@@ -579,11 +774,7 @@ def _analyze_image_with_groq(image_path: Path, filename: str) -> tuple[DocumentT
                 "extracted_by": "groq-llama-vision",
             }
         else:
-            items = [
-                {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
-                for it in (data.get("items") or [])
-                if it.get("label") and it.get("amount") is not None
-            ]
+            items = [item for item in (normalize_spending_item(it) for it in (data.get("items") or [])) if item]
             total = data.get("total")
             if total is None and items:
                 total = round(sum(i["amount"] for i in items), 2)
@@ -591,12 +782,15 @@ def _analyze_image_with_groq(image_path: Path, filename: str) -> tuple[DocumentT
             summary = {
                 "merchant": (data.get("merchant") or filename)[:160],
                 "detected_total": float(total) if total is not None else None,
+                "subtotal": data.get("subtotal"),
+                "discount_total": data.get("discount_total"),
                 "occurred_on": occurred_on.isoformat() if occurred_on else None,
                 "document_kind": doc_type_str,
                 "extracted_by": "groq-llama-vision",
             }
             confidence = 0.92 if total is not None else 0.65
-            extracted_data = {"summary": summary, "items": items}
+            extracted_data = validate_spending_totals({"summary": summary, "items": items})
+            confidence = adjust_spending_confidence(extracted_data, confidence)
 
         return detected_type, extracted_data, confidence
 
@@ -685,11 +879,7 @@ TEXTO DO DOCUMENTO:
                 "extracted_by": "groq-llama-text",
             }
         else:
-            items = [
-                {"label": str(it.get("label", ""))[:120], "amount": float(it["amount"])}
-                for it in (data.get("items") or [])
-                if it.get("label") and it.get("amount") is not None
-            ]
+            items = [item for item in (normalize_spending_item(it) for it in (data.get("items") or [])) if item]
             total = data.get("total")
             if total is None and items:
                 total = round(sum(i["amount"] for i in items), 2)
@@ -697,12 +887,15 @@ TEXTO DO DOCUMENTO:
             summary = {
                 "merchant": (data.get("merchant") or filename)[:160],
                 "detected_total": float(total) if total is not None else None,
+                "subtotal": data.get("subtotal"),
+                "discount_total": data.get("discount_total"),
                 "occurred_on": occurred_on.isoformat() if occurred_on else None,
                 "document_kind": doc_type_str,
                 "extracted_by": "groq-llama-text",
             }
             confidence = 0.92 if total is not None else 0.65
-            extracted_data = {"summary": summary, "items": items}
+            extracted_data = validate_spending_totals({"summary": summary, "items": items})
+            confidence = adjust_spending_confidence(extracted_data, confidence)
 
         return detected_type, extracted_data, confidence
 
@@ -726,8 +919,9 @@ def extract_receipt_data(text: str, filename: str, document_type: DocumentType) 
         "occurred_on": occurred_on.isoformat() if occurred_on else None,
         "document_kind": "credit_card" if document_type == DocumentType.CREDIT_CARD else "receipt",
     }
-    confidence = 0.78 if total is not None else 0.45
-    return {"summary": summary, "items": items}, confidence
+    extracted_data = validate_spending_totals({"summary": summary, "items": items})
+    confidence = adjust_spending_confidence(extracted_data, 0.78 if total is not None else 0.45)
+    return extracted_data, confidence
 
 
 def infer_employee_name(lines: list[str]) -> str | None:
@@ -1068,6 +1262,7 @@ def process_document(db: Session, document_id: int) -> None:
 
     try:
         stored_path = Path(document.stored_path)
+        image_quality = ensure_image_quality_for_extraction(stored_path)
         text = extract_text_from_file(stored_path)
         extracted_data: dict = {"summary": {}, "items": []}
         confidence = 0.45
@@ -1091,6 +1286,8 @@ def process_document(db: Session, document_id: int) -> None:
 
             if detected_type == DocumentType.PAYSLIP:
                 sync_payslip_outputs(db, document, extracted_data)
+            elif can_auto_consolidate_spending(extracted_data):
+                sync_spending_outputs(db, document, extracted_data)
 
         # ── Tesseract-only fallback (GROQ_API_KEY not set or Groq call failed) ─
         else:
@@ -1140,13 +1337,48 @@ def process_document(db: Session, document_id: int) -> None:
 
                 if not extracted_data["items"]:
                     extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
+                    if can_auto_consolidate_spending(extracted_data):
+                        sync_spending_outputs(db, document, extracted_data)
+                else:
+                    extracted_data = validate_spending_totals(extracted_data)
+                    confidence = adjust_spending_confidence(extracted_data, confidence)
+
+        if image_quality and not has_useful_extraction(document.document_type, extracted_data):
+            failed_quality = dict(image_quality)
+            failed_quality["issues"] = list(failed_quality.get("issues") or []) + [
+                "Nao foi possivel identificar valores ou campos financeiros na imagem."
+            ]
+            failed_quality["is_acceptable"] = False
+            raise PoorImageQualityError(
+                "Nao foi possivel extrair dados financeiros desta foto. Envie uma imagem mais nitida, bem iluminada e com o documento inteiro visivel.",
+                failed_quality,
+            )
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]
+        if image_quality:
+            extracted_data["image_quality"] = image_quality
         document.extracted_data = extracted_data
         document.confidence = confidence
         document.processed_at = datetime.utcnow()
         db.commit()
+    except PoorImageQualityError as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        document = db.get(Document, document_id)
+        if document:
+            document.status = DocumentStatus.FAILED
+            document.extracted_text = None
+            document.extracted_data = {
+                "error": str(exc),
+                "error_code": "poor_image_quality",
+                "image_quality": exc.details,
+            }
+            document.confidence = 0.0
+            document.processed_at = datetime.utcnow()
+            db.commit()
     except Exception as exc:
         # Always rollback first: if the exception came from a DB operation the
         # session is in "pending rollback" state and a bare commit() would raise

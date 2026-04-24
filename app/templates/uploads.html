@@ -38,6 +38,9 @@
             {% if is_failed and document.extracted_data and document.extracted_data.get('error') %}
             <p class="mt-1 text-xs text-rose-600">{{ document.extracted_data.get('error') }}</p>
             {% endif %}
+            {% if is_processed and document.extracted_data and document.extracted_data.get('warnings') %}
+            <p class="mt-1 text-xs font-semibold text-amber-700">Revisao necessaria: totais do documento nao fecharam automaticamente.</p>
+            {% endif %}
           </div>
           <div class="flex flex-col items-end gap-2">
             <p class="text-sm text-slate-500">{{ document.created_at.strftime("%Y-%m-%d %H:%M") }}</p>

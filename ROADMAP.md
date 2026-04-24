@@ -46,6 +46,8 @@ Objetivo: automatizar a leitura de holerites e despesas.
 - Upload de holerites em PDF e imagem.
 - Upload de faturas, extratos e notas.
 - Pipeline de extracao para valores, datas, nomes e categorias.
+- Validacao de qualidade de fotos antes de OCR/IA.
+- Validacao de consistencia entre itens, descontos e total pago.
 - Interface de revisao manual dos dados extraidos.
 - Cadastro automatico de rendimentos e despesas a partir da extracao.
 
@@ -53,6 +55,7 @@ Entrega esperada:
 
 - Documento enviado vira lancamento com revisao.
 - Usuario consegue corrigir dados antes de salvar definitivamente.
+- Documento com foto ruim ou total inconsistente nao vira lancamento automatico.
 
 ## Fase 3 - Parcelamentos, Financiamentos e Recorrencias
 
@@ -117,6 +120,7 @@ Objetivo: aumentar confiabilidade, seguranca e qualidade dos dados.
 
 - Testes automatizados de seguranca multi-tenant.
 - Testes de integridade de extracao.
+- Testes para baixa qualidade de imagem, descontos em cupons e divergencia de totais.
 - Controle de rate limit e upload.
 - Otimizacao de performance e consultas.
 - Plano de migracao caso o Railway free fique insuficiente.
@@ -138,6 +142,7 @@ Entrega esperada:
 ## Riscos Principais
 
 - OCR inconsistente em documentos de baixa qualidade.
+- Fotos com qualidade limiar podem exigir ajuste fino de thresholds de brilho, contraste e nitidez.
 - Classificacao incorreta de categorias sem validacao manual.
 - Limites do Railway free para processamento de arquivos.
 - Vazamento de dados por falha de filtro tenant se a arquitetura nao for rigorosa.
