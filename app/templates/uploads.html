@@ -4,7 +4,7 @@
   <article class="rounded-3xl bg-white p-8 shadow-xl">
     <h1 class="text-3xl font-black text-slate-900">Upload de documentos</h1>
     <p class="mt-2 text-sm text-slate-500">Todo parsing e OCR acontecem no backend. O navegador apenas envia o arquivo.</p>
-    <form method="post" action="/uploads" enctype="multipart/form-data" class="mt-6 space-y-4">
+    <form method="post" action="/uploads" enctype="multipart/form-data" class="mt-6 space-y-4" data-upload-form>
       <select name="document_type" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required>
         <option value="payslip">Holerite</option>
         <option value="credit_card">Fatura de cartao</option>
@@ -12,7 +12,7 @@
         <option value="other">Outro documento</option>
       </select>
       <input type="file" name="file" class="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
-      <button class="w-full rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white">Enviar para processamento</button>
+      <button class="w-full rounded-2xl bg-teal-600 px-4 py-3 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-upload-button>Enviar para processamento</button>
     </form>
   </article>
   <article class="rounded-3xl bg-white p-8 shadow-xl">
@@ -42,8 +42,8 @@
           <div class="flex flex-col items-end gap-2">
             <p class="text-sm text-slate-500">{{ document.created_at.strftime("%Y-%m-%d %H:%M") }}</p>
             <div class="flex flex-wrap justify-end gap-2">
-              {% if is_processed and document.document_type.value == 'payslip' %}
-              <a href="/uploads/{{ document.id }}/review" class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">Revisar extracao</a>
+              {% if is_processed and document.document_type.value != 'other' %}
+              <a href="/uploads/{{ document.id }}/review" class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">Revisar e consolidar</a>
               {% endif %}
               {% if is_failed or is_pending %}
               <form method="post" action="/uploads/{{ document.id }}/retry">
@@ -69,4 +69,15 @@
     </div>
   </article>
 </section>
+<script>
+  const uploadForm = document.querySelector("[data-upload-form]");
+  if (uploadForm) {
+    uploadForm.addEventListener("submit", () => {
+      const button = uploadForm.querySelector("[data-upload-button]");
+      if (!button) return;
+      button.disabled = true;
+      button.textContent = "Enviando e enfileirando...";
+    });
+  }
+</script>
 {% endblock %}

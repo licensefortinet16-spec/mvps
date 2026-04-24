@@ -41,11 +41,27 @@ Aplicacao:
 5. Validar dashboard em `/`.
 6. Entrar como admin e abrir `/admin`.
 
+## Banco e migrações
+
+O app ainda cria tabelas automaticamente no startup para manter o deploy simples do MVP, mas novas mudanças de schema devem ser registradas em Alembic.
+
+```bash
+alembic upgrade head
+```
+
+Para rodar testes localmente fora do container:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
 ## Uploads testaveis agora
 
 - PDF com texto extraivel.
 - Imagem suportada pelo `Pillow`.
 - Arquivos `txt` e `csv`.
+- Cliques repetidos no mesmo upload sao ignorados por hash do arquivo dentro de uma janela curta.
 
 ## Google Login
 
@@ -53,6 +69,7 @@ Para habilitar login com Google, preencher no `.env`:
 
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `UPLOAD_DUPLICATE_WINDOW_MINUTES` controla a janela de deduplicacao de uploads.
 
 ## Railway
 

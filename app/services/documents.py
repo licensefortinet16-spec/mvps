@@ -990,6 +990,17 @@ def sync_payslip_outputs(db: Session, document: Document, extracted_data: dict) 
         )
 
 
+def cleanup_generated_document_entries(db: Session, document: Document) -> None:
+    db.execute(
+        delete(FinancialEntry).where(
+            FinancialEntry.tenant_id == document.tenant_id,
+            FinancialEntry.user_id == document.user_id,
+            FinancialEntry.source == "upload",
+            FinancialEntry.notes.like(f"%document_id={document.id}%"),
+        )
+    )
+
+
 def _create_entries_from_result(
     db: Session,
     document: Document,
@@ -1045,6 +1056,11 @@ def _create_entries_from_result(
             ))
 
 
+def sync_spending_outputs(db: Session, document: Document, extracted_data: dict) -> None:
+    cleanup_generated_document_entries(db, document)
+    _create_entries_from_result(db, document, extracted_data, document.document_type)
+
+
 def process_document(db: Session, document_id: int) -> None:
     document = db.get(Document, document_id)
     if not document:
@@ -1075,8 +1091,6 @@ def process_document(db: Session, document_id: int) -> None:
 
             if detected_type == DocumentType.PAYSLIP:
                 sync_payslip_outputs(db, document, extracted_data)
-            else:
-                _create_entries_from_result(db, document, extracted_data, detected_type)
 
         # ── Tesseract-only fallback (GROQ_API_KEY not set or Groq call failed) ─
         else:
@@ -1126,7 +1140,6 @@ def process_document(db: Session, document_id: int) -> None:
 
                 if not extracted_data["items"]:
                     extracted_data, confidence = extract_receipt_data(text, document.filename, document.document_type)
-                    _create_entries_from_result(db, document, extracted_data, document.document_type)
 
         document.status = DocumentStatus.PROCESSED
         document.extracted_text = text[:15000]

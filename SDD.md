@@ -177,6 +177,7 @@ Definicao:
 - Registro do documento.
 - Validacao tecnica do arquivo.
 - Enfileiramento para processamento.
+- Deduplicacao por hash para impedir multiplos registros quando o usuario clica repetidamente no envio.
 - Extracao de texto e campos.
 - Classificacao e normalizacao.
 - Persistencia dos resultados.
@@ -231,4 +232,3 @@ O sistema so pode ser considerado pronto quando:
 - O frontend estiver responsivo em telas pequenas e grandes.
 - Uploads e extracoes funcionarem sem processamento no navegador.
 - O admin conseguir ver apenas metricas operacionais.
-

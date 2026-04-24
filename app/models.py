@@ -118,6 +118,8 @@ class Document(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    file_size: Mapped[int | None] = mapped_column(nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     document_type: Mapped[DocumentType] = mapped_column(Enum(DocumentType), nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.PENDING, nullable=False)

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     resend_from: str = "Financa <noreply@financa.app>"
     app_base_url: str = ""
     groq_api_key: str = ""
+    upload_duplicate_window_minutes: int = 5
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

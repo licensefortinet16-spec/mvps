@@ -15,3 +15,4 @@ pytesseract==0.3.13
 python-slugify==8.0.4
 groq==0.13.1
 resend==2.10.0
+alembic==1.13.3
