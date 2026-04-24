@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import hash_password
@@ -67,42 +67,11 @@ def bootstrap_admin() -> None:
         db.close()
 
 
-def ensure_plan_type_column() -> None:
-    inspector = inspect(engine)
-    columns = {column["name"] for column in inspector.get_columns("installment_plans")}
-    if "plan_type" in columns:
-        return
-    with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE installment_plans ADD COLUMN plan_type VARCHAR(20)"))
-        connection.execute(
-            text(
-                "UPDATE installment_plans "
-                "SET plan_type = CASE "
-                "WHEN lower(category) LIKE '%financi%' THEN 'FINANCING' "
-                "ELSE 'INSTALLMENT' END "
-                "WHERE plan_type IS NULL"
-            )
-        )
-        connection.execute(text("ALTER TABLE installment_plans ALTER COLUMN plan_type SET NOT NULL"))
-
-
-def ensure_document_upload_metadata_columns() -> None:
-    inspector = inspect(engine)
-    columns = {column["name"] for column in inspector.get_columns("documents")}
-    with engine.begin() as connection:
-        if "content_hash" not in columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN content_hash VARCHAR(64)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_content_hash ON documents (content_hash)"))
-        if "file_size" not in columns:
-            connection.execute(text("ALTER TABLE documents ADD COLUMN file_size INTEGER"))
-
-
 @app.on_event("startup")
 def on_startup() -> None:
     settings.upload_path.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
-    ensure_plan_type_column()
-    ensure_document_upload_metadata_columns()
+    if not settings.is_production:
+        Base.metadata.create_all(bind=engine)
     bootstrap_admin()
 
 

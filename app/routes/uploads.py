@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pathlib import Path
 from sqlalchemy import delete, select
@@ -24,6 +25,46 @@ router = APIRouter(prefix="/uploads")
 settings = get_settings()
 _upload_locks_guard = threading.Lock()
 _upload_locks: set[tuple[int, str]] = set()
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv"}
+ALLOWED_UPLOAD_CONTENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "text/plain",
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+}
+
+
+def _clean_upload_filename(filename: str | None) -> str:
+    raw_name = Path(filename or "documento").name.strip()
+    stem = Path(raw_name).stem or "documento"
+    suffix = Path(raw_name).suffix.lower()
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._-") or "documento"
+    return f"{safe_stem[:120]}{suffix}"
+
+
+def _validate_upload(document_type: str, file: UploadFile, content: bytes) -> DocumentType:
+    try:
+        parsed_document_type = DocumentType(document_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de documento invalido.") from exc
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Formato de arquivo nao permitido.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type and content_type not in ALLOWED_UPLOAD_CONTENT_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de conteudo nao permitido.")
+
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Arquivo vazio.")
+    if len(content) > settings.max_upload_file_size_bytes:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Arquivo maior que o limite permitido.")
+
+    return parsed_document_type
 
 
 def process_document_async(document_id: int) -> None:
@@ -78,6 +119,7 @@ async def create_upload(
     user: User = Depends(get_current_client),
 ):
     content = await file.read()
+    parsed_document_type = _validate_upload(document_type, file, content)
     content_hash = hashlib.sha256(content).hexdigest()
     lock_key = (user.tenant_id, content_hash)
     with _upload_locks_guard:
@@ -86,7 +128,7 @@ async def create_upload(
         _upload_locks.add(lock_key)
 
     try:
-        return _create_upload_record(background_tasks, document_type, file, content, content_hash, db, user)
+        return _create_upload_record(background_tasks, parsed_document_type, file, content, content_hash, db, user)
     finally:
         with _upload_locks_guard:
             _upload_locks.discard(lock_key)
@@ -94,7 +136,7 @@ async def create_upload(
 
 def _create_upload_record(
     background_tasks: BackgroundTasks,
-    document_type: str,
+    document_type: DocumentType,
     file: UploadFile,
     content: bytes,
     content_hash: str,
@@ -116,23 +158,24 @@ def _create_upload_record(
 
     tenant_dir = settings.upload_path / str(user.tenant_id)
     tenant_dir.mkdir(parents=True, exist_ok=True)
-    target = tenant_dir / f"{uuid.uuid4().hex}_{file.filename}"
+    clean_filename = _clean_upload_filename(file.filename)
+    target = tenant_dir / f"{uuid.uuid4().hex}_{clean_filename}"
     target.write_bytes(content)
 
     document = Document(
         tenant_id=user.tenant_id,
         user_id=user.id,
-        filename=file.filename,
+        filename=clean_filename,
         stored_path=str(target),
         content_hash=content_hash,
         file_size=len(content),
         content_type=file.content_type,
-        document_type=DocumentType(document_type),
+        document_type=document_type,
     )
     db.add(document)
     db.commit()
     db.refresh(document)
-    log_event(db, "documents.uploaded", user=user, metadata={"document_id": document.id, "type": document_type})
+    log_event(db, "documents.uploaded", user=user, metadata={"document_id": document.id, "type": document_type.value})
     background_tasks.add_task(process_document_async, document.id)
     return RedirectResponse("/uploads", status_code=303)
 

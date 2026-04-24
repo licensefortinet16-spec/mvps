@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     app_base_url: str = ""
     groq_api_key: str = ""
     upload_duplicate_window_minutes: int = 5
+    max_upload_file_size_mb: int = 10
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -41,6 +42,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"
+
+    @property
+    def max_upload_file_size_bytes(self) -> int:
+        return self.max_upload_file_size_mb * 1024 * 1024
 
     @property
     def resolved_database_url(self) -> str:

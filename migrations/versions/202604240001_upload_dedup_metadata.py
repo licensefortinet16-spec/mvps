@@ -10,6 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
+from app.models import Base
+
 
 revision: str = "202604240001"
 down_revision: Union[str, None] = None
@@ -18,7 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    inspector = inspect(op.get_bind())
+    bind = op.get_bind()
+    Base.metadata.create_all(bind=bind)
+
+    inspector = inspect(bind)
     if "documents" not in inspector.get_table_names():
         return
     columns = {column["name"] for column in inspector.get_columns("documents")}
@@ -29,6 +34,19 @@ def upgrade() -> None:
         op.add_column("documents", sa.Column("file_size", sa.Integer(), nullable=True))
     if "ix_documents_content_hash" not in indexes:
         op.create_index("ix_documents_content_hash", "documents", ["content_hash"], unique=False)
+
+    if "installment_plans" in inspector.get_table_names():
+        plan_columns = {column["name"] for column in inspector.get_columns("installment_plans")}
+        if "plan_type" not in plan_columns:
+            op.add_column("installment_plans", sa.Column("plan_type", sa.String(length=20), nullable=True))
+            op.execute(
+                "UPDATE installment_plans "
+                "SET plan_type = CASE "
+                "WHEN lower(category) LIKE '%financi%' THEN 'FINANCING' "
+                "ELSE 'INSTALLMENT' END "
+                "WHERE plan_type IS NULL"
+            )
+            op.alter_column("installment_plans", "plan_type", nullable=False)
 
 
 def downgrade() -> None:
